@@ -66,7 +66,7 @@ namespace DotNetCertAuthSample
             X509Certificate2 cert)
         {
             APIResultModel result = await httpService.SendGetAsync(
-                "https://localhost:5001/api/Certificates/RevokeCertificate"
+                "https://ezca.io/api/Certificates/RevokeCertificate"
                 , cert);
             if (result.Success)
             {
@@ -90,7 +90,7 @@ namespace DotNetCertAuthSample
             CertRenewReqModel certReq, X509Certificate2 cert)
         {
             APIResultModel result = await httpService.SendPostAsync(
-                "https://localhost:5001/api/Certificates/RenewCertificate"
+                "https://ezca.io/api/Certificates/RenewCertificate"
                 , cert, JsonSerializer.Serialize(certReq));
             if (result.Success)
             {
