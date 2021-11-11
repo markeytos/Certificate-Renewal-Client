@@ -79,6 +79,40 @@ namespace DotNetCertAuthSample.Services
             return apiResult;
         }
 
+        public async Task<APIResultModel> SendPostAsync(string url,
+            X509Certificate2 clientCertificate, string jsonPayload)
+        {
+            GetTokenAsync(clientCertificate);
+            APIResultModel apiResult = new();
+            HttpResponseMessage responseMessage;
+            HttpRequestMessage requestMessage = new(HttpMethod.Post, url);
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _token.AccessToken);
+            try
+            {
+                requestMessage.Content = new StringContent(jsonPayload,
+                    Encoding.UTF8, "application/json");
+                responseMessage = await _retryPolicy.ExecuteAsync(async () =>
+                          await SendMessageAsync(requestMessage));
+                apiResult.Message = await responseMessage.Content.ReadAsStringAsync();
+                apiResult.Success = responseMessage.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                apiResult.Success = false;
+                if (ex.Message.Contains("One or more errors")
+                    && ex.InnerException != null)
+                {
+                    apiResult.Message = ex.InnerException.Message;
+                }
+                else
+                {
+                    apiResult.Message = ex.Message;
+                }
+            }
+            return apiResult;
+        }
+
 
         private void CreateRSAJWTToken(X509Certificate2 clientCertificate)
         {

@@ -8,6 +8,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <COMReference Include="CERTENROLLLib">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>0</VersionMinor>
+      <VersionMajor>1</VersionMajor>
+      <Guid>728ab348-217d-11da-b2a4-000e7bbb2b09</Guid>
+      <Lcid>0</Lcid>
+      <Isolated>false</Isolated>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="jose-jwt" Version="3.2.0" />
     <PackageReference Include="Polly" Version="7.2.2" />
   </ItemGroup>
