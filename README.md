@@ -1,2 +1,2 @@
 # Certificate Renewal Client
-This is a repo containing samples on how to renew your existing certificate
+In Keytos our goal is to make PKI services as easy to use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application that uses a certificate from the local certificate store in windows to authenticate with EZCA and requests a new certificate. 
