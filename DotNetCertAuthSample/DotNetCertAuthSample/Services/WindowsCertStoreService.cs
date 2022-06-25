@@ -10,7 +10,7 @@ namespace DotNetCertAuthSample.Services
 {
     public static class WindowsCertStoreService
     {
-        public static X509Certificate2 GetCertFromWinStoreBySubject(string subjectName)
+        public static X509Certificate2? GetCertFromWinStoreBySubject(string subjectName)
         {
             X509Store store = new(StoreLocation.CurrentUser);
             X509Certificate2? cert = null;
@@ -19,12 +19,12 @@ namespace DotNetCertAuthSample.Services
                 X509FindType.FindBySubjectName, subjectName, true);
             if (certs.Count > 0)
             {
-                cert = certs[0];
+                cert = certs.OrderByDescending(i => i.NotAfter).First();
             }
             return cert;
         }
 
-        public static X509Certificate2 GetCertFromWinStoreBythumbprint(string thumbprint)
+        public static X509Certificate2? GetCertFromWinStoreBythumbprint(string thumbprint)
         {
             //not recommended since it breaks with auto rotation
             X509Store store = new(StoreLocation.CurrentUser);

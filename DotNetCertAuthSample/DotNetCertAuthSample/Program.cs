@@ -70,7 +70,9 @@ namespace DotNetCertAuthSample
                 , cert);
             if (result.Success)
             {
-                APIResultModel serverResponse = JsonSerializer.Deserialize<APIResultModel>(result.Message);
+                APIResultModel serverResponse = 
+                    JsonSerializer.Deserialize<APIResultModel>(result.Message)
+                    ?? new(false, "error deserializing response: " + result.Message);
                 if (serverResponse.Success)
                 {
                     Console.WriteLine(serverResponse.Message);
@@ -94,7 +96,9 @@ namespace DotNetCertAuthSample
                 , cert, JsonSerializer.Serialize(certReq));
             if (result.Success)
             {
-                APIResultModel serverResponse = JsonSerializer.Deserialize<APIResultModel>(result.Message);
+                APIResultModel serverResponse = 
+                    JsonSerializer.Deserialize<APIResultModel>(result.Message) ??
+                    new(false, "error deserializing response: " + result.Message);
                 if (serverResponse.Success)
                 {
                     return serverResponse.Message;
