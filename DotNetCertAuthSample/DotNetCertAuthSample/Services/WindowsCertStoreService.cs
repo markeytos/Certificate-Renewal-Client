@@ -10,9 +10,17 @@ namespace DotNetCertAuthSample.Services
 {
     public static class WindowsCertStoreService
     {
-        public static X509Certificate2? GetCertFromWinStoreBySubject(string subjectName)
+        public static X509Certificate2 GetCertFromWinStoreBySubject(string subjectName, bool localStore)
         {
-            X509Store store = new(StoreLocation.CurrentUser);
+            X509Store store;
+            if (localStore)
+            {
+                store = new(StoreLocation.LocalMachine);
+            }
+            else
+            {
+                store = new(StoreLocation.CurrentUser);
+            }
             X509Certificate2? cert = null;
             store.Open(OpenFlags.ReadOnly);
             X509Certificate2Collection certs = store.Certificates.Find(
@@ -20,6 +28,11 @@ namespace DotNetCertAuthSample.Services
             if (certs.Count > 0)
             {
                 cert = certs.OrderByDescending(i => i.NotAfter).First();
+            }
+            if (cert == null)
+            {
+                throw new FileNotFoundException($"Could not find certificate for domain {subjectName} " +
+                    $"in the {StoreString(localStore)}");
             }
             return cert;
         }
@@ -39,15 +52,23 @@ namespace DotNetCertAuthSample.Services
             return cert;
         }
 
-        public static CX509CertificateRequestPkcs10 CreateCSR(string subjectName, List<string> sans, int keylength)
+        public static CX509CertificateRequestPkcs10 CreateCSR(string subjectName, 
+            List<string> sans, int keylength, bool localStore)
         {
             CX509CertificateRequestPkcs10 certRequest = new ();
-            certRequest.Initialize(X509CertificateEnrollmentContext.ContextUser);
+            if(localStore)
+            {
+                certRequest.Initialize(X509CertificateEnrollmentContext.ContextMachine);
+            }
+            else
+            {
+                certRequest.Initialize(X509CertificateEnrollmentContext.ContextUser);
+            }
             certRequest.PrivateKey.ExportPolicy = X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
             certRequest.PrivateKey.Length = keylength;
             certRequest.PrivateKey.KeyUsage = X509PrivateKeyUsageFlags.XCN_NCRYPT_ALLOW_ALL_USAGES;
             certRequest.PrivateKey.KeySpec = X509KeySpec.XCN_AT_NONE;
-            certRequest.PrivateKey.MachineContext = false;
+            certRequest.PrivateKey.MachineContext = localStore;
             certRequest.PrivateKey.Create();
             var objDN = new CX500DistinguishedName();
             certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
@@ -103,6 +124,16 @@ namespace DotNetCertAuthSample.Services
             }
             objExtensionAlternativeNames.InitializeEncode(objAlternativeNames);
             return objExtensionAlternativeNames;
+        }
+
+        private static string StoreString(bool localStore)
+        {
+            if (localStore)
+            {
+                return "local store";
+            }
+            return "user store";
+
         }
     }
 }

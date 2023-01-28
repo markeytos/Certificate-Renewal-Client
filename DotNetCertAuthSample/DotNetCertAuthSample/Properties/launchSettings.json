@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DotNetCertAuthSample": {
+      "commandName": "Project",
+      "commandLineArgs": "renew -r --LocalStore -d oldpony.local "
+    }
+  }
+}
