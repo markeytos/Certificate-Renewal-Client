@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DotNetCertAuthSample": {
+      "commandName": "Project",
+      "commandLineArgs": "create -r --LocalStore -d oldpony.local --caid 36df3683-c040-481e-a28c-a7814d9cd561 -v 20 "
+    }
+  }
+}
