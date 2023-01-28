@@ -37,14 +37,5 @@ namespace DotNetCertAuthSample.Models
         [Option("AzTenantID", Required = false,
            HelpText = "Optional If you want to authenticate with an Azure application you must pass " +
             "you Azure TenantID, the Application ID and the Application Secret")]
-        public string TenantID { get; set; } = "";
-        [Option("AzAppID", Required = false,
-           HelpText = "Optional If you want to authenticate with an Azure application you must pass " +
-            "you Azure TenantID, the Application ID and the Application Secret")]
-        public string ClientID { get; set; } = "";
-        [Option("AzAppSecret", Required = false,
-           HelpText = "Optional If you want to authenticate with an Azure application you must pass " +
-            "you Azure TenantID, the Application ID and the Application Secret")]
-        public string ClientSecret { get; set; } = "";
     }
 }

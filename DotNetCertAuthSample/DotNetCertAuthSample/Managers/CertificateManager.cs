@@ -103,6 +103,11 @@ public class CertificateManager
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
             WindowsCertStoreService.InstallCertificate(createdCert, certRequest);
             _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
+            if (values.RDPCert)
+            {
+                SetRDPCertificate(
+                    CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint);
+            }
         }
         catch (Exception ex)
         {
@@ -176,8 +181,7 @@ public class CertificateManager
                 throw new ArgumentNullException(nameof(values.Domain));
             }
             IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), 
-                _logger, values.url, CreateTokenCredential(
-                    values.ClientID, values.ClientSecret, values.TenantID));
+                _logger, values.url);
             _logger.LogInformation("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
             APIResultModel registrationResult = await ezcaClient.RegisterDomainAsync(
