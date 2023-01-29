@@ -2,11 +2,9 @@
 In Keytos our goal is to make our [PKI services](https://www.keytos.io/AZURE-PKI.html) as easy to use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows that can:
 
 ## Register a new domain in EZCA
-This will use a [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet) to authenticate to EZCA and register the domain **Note: the identity must be a human identity, MSI or Application will fail since applications cannot be domain owners**. Once the domain is registered, it will create a certificate for that domain and place it in the certificate store you specified.  
+This will use a [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet) to authenticate to EZCA and register the domain **Note: the identity must be a human identity, MSI or Application will fail since applications cannot be domain owners**.
 **WARNING: This command should only be called once, after the domain is registered in EZCA this command will fail.**
 ```
- -r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
-
   -d, --Domain          Required. Domain for the certificate you want to create
 
   --AppInsights         Azure Application Insights connection string to send logs to
@@ -15,18 +13,12 @@ This will use a [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotne
 
   --caid                Required. CA ID of the CA you want to request the certificate from
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store
-
-  -v, --Validity        Required. Certificate validity in days
-  
   --help                Display this help screen.
 
   --version             Display version information.
 ```
 Sample call:
-```.\EZCACertManager.exe register -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30```
-If we want to use this certificate as the servers RDP certificate we must add ```--LocalStore -r```:
-```.\EZCACertManager.exe register -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30 --LocalStore -r```
+```.\EZCACertManager.exe register -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" ```
 
 ## Create a new certificate
 

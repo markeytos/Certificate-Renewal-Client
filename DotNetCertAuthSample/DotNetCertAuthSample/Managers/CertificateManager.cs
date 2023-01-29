@@ -167,11 +167,6 @@ public class CertificateManager
         }
         try
         {
-            if (values.RDPCert && values.LocalCertStore == false)
-            {
-                throw new ArgumentException(
-                    "If certificate will be used for RDP it must be stored in the local store");
-            }
             if (!IsGuid(values.caID))
             {
                 throw new ArgumentException("Please enter a valid CA ID Guid");
@@ -193,17 +188,10 @@ public class CertificateManager
                     $"Could not register new domain in EZCA {registrationResult.Message}");
             }
             _logger.LogInformation($"Successfully registered domain: {values.Domain}");
-            X509Certificate2 createdCertificate = await CreateCertificateAsync(
-                values.Domain, values.LocalCertStore, selectedCA,
-                values.Validity, ezcaClient);
-            if(values.RDPCert)
-            {
-                SetRDPCertificate(createdCertificate.Thumbprint);
-            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error registering certificate");
+            _logger.LogError(ex, "Error registering domain");
             return 1;
         }
         return 0;

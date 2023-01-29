@@ -31,7 +31,5 @@ namespace DotNetCertAuthSample
                 await certificateManager.CallCertActionAsync();
             }
         }
-
-
     }
 }
