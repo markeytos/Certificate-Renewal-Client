@@ -74,3 +74,6 @@ Sample call:
 ```.\EZCACertManager.exe renew -d mydomain.com```
 Same as the other commands, if you want to serve this certificate when a computer tries to RDP to this endpoint, we must add ```--LocalStore -r```:
 ```.\EZCACertManager.exe renew -d mydomain.com --LocalStore -r```
+
+## Download Signed Binary 
+https://www.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 
