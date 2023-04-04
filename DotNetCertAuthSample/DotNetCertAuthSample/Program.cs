@@ -20,11 +20,12 @@ namespace DotNetCertAuthSample
         {
             CertificateManager certificateManager = new ();
             int result = Parser.Default.ParseArguments<
-                RenewArgModel, GenerateArgModel, RegisterArgModel>(args)
+                RenewArgModel, GenerateArgModel, RegisterArgModel, CreateDCCertificate>(args)
                 .MapResult(
                  (RenewArgModel operation) => certificateManager.InitializeManager(operation),
                  (GenerateArgModel operation) => certificateManager.InitializeManager(operation),
                  (RegisterArgModel operation) => certificateManager.InitializeManager(operation),
+                 (CreateDCCertificate operation) => certificateManager.InitializeManager(operation),
                 (IEnumerable<Error> errs) => certificateManager.ProcessError(errs));
             if(result == 0)
             {
