@@ -52,6 +52,39 @@ Sample call:
 ```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30```
 Once again if you want to use this certificate for RDP we must add ```--LocalStore -r```:
 ```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30 --LocalStore -r```
+## Create a Domain Controller Certificate
+If you are trying to go passwordless with [hello for business hybrid key trust deployment](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/hello-hybrid-key-trust), you can use this application to [request the domain controller certificate](https://docs.keytos.io/azure-pki/intune-certificate-authority/domain-controller-certificates-for-windows-hello-hybrid/#using-the-application).
+The following options are available for this command:
+```
+   -d, --DNS             Required. DNS Entry for this Domain Controller
+
+  -s, --SubjectName     Required. Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain
+                        Controllers DC=contoso DC=com
+
+  --caid                Required. CA ID of the CA you want to request the certificate from
+
+  --TemplateID          Required. Template ID of the template you want to request the certificate from (Note: Only SCEP
+                        templates are supported)
+
+  -v, --Validity        Required. Certificate validity in days
+
+  -g, --DCGUID          Domain Controller GUID. This is only required if SMTP replication is used in your domain. Learn
+                        more:
+                        https://learn.microsoft.com/en-US/troubleshoot/windows-server/windows-security/requirements-doma                        in-controller#how-to-determine-the-domain-controller-guid
+
+  --AppInsights         Azure Application Insights connection string to send logs to
+
+  -e, --EZCAInstance    (Default: https://portal.ezca.io/) EZCA instance url
+
+  --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1,1.3.6.1.4.1.311.20.2.2,1.3.6.1.5.2.3.5) EKUs
+                        requested for the certificate
+
+  --AzureCLI            (Default: false) Use Azure CLI as authentication method
+```
+sample command:
+``` 
+.\EZCACertManager.exe createDC  -s \"CN=server1.contoso.com OU=Domain Controllers, DC=contoso DC=com\" -d your.fqdn --caid yourCAIDFromThePortal --TemplateID YourTemplateIDFromThePortal -v 20
+```
 
 ## Renew an existing certificate
 Once a certificate has been created and is in your Windows store, we recommend setting a scheduled task running this binary with the renew function to automatically renew your certificate. This uses the existing certificate to authenticate so no need for an AAD identity. For this one the only required option is the ```-d``` with the subject name of the certificate, the console application will use that information to get the certificate from the store you specify and renew it in EZCA.
