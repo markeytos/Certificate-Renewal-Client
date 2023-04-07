@@ -91,7 +91,7 @@ Once a certificate has been created and is in your Windows store, we recommend s
 ```
  -r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
 
-  -d, --Domain          Required. Domain for the certificate you want to create
+  -s, --SubjectName          Required. Domain for the certificate you want to create
 
   --AppInsights         Azure Application Insights connection string to send logs to
 
