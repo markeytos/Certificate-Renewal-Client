@@ -29,6 +29,18 @@ namespace DotNetCertAuthSample.Services
             {
                 cert = certs.OrderByDescending(i => i.NotAfter).First();
             }
+            else
+            {
+                X509Certificate2Collection allStoreCertificates = store.Certificates;
+                foreach (X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i => i.NotAfter))
+                {
+                    if (storeCert.Subject.Contains(subjectName))
+                    {
+                        cert = storeCert;
+                        break;
+                    }
+                }
+            }
             if (cert == null)
             {
                 throw new FileNotFoundException($"Could not find certificate for domain {subjectName} " +
@@ -53,7 +65,7 @@ namespace DotNetCertAuthSample.Services
         }
 
         public static CX509CertificateRequestPkcs10 CreateCSR(string subjectName, 
-            List<string> sans, int keylength, bool localStore)
+            List<string> sans, int keylength, bool localStore, List<string> ekus)
         {
             CX509CertificateRequestPkcs10 certRequest = new ();
             if(localStore)
@@ -84,16 +96,19 @@ namespace DotNetCertAuthSample.Services
             certRequest.X509Extensions.Add((CX509Extension)extensionKeyUsage);
 
             // Enhanced Key Usage Extension
-            CObjectId clientObjectId = new ();
-            CObjectId serverObjectId = new ();
             CObjectIds objectIds = new ();
-            CX509ExtensionEnhancedKeyUsage x509ExtensionEnhancedKeyUsage = new();
-            clientObjectId.InitializeFromValue("1.3.6.1.5.5.7.3.2");
-            objectIds.Add(clientObjectId);
-            serverObjectId.InitializeFromValue("1.3.6.1.5.5.7.3.1");
-            objectIds.Add(serverObjectId);
-            x509ExtensionEnhancedKeyUsage.InitializeEncode(objectIds);
-            certRequest.X509Extensions.Add((CX509Extension)x509ExtensionEnhancedKeyUsage);
+            if(ekus.Any())
+            {
+                CX509ExtensionEnhancedKeyUsage x509ExtensionEnhancedKeyUsage = new();
+                foreach(string eku in ekus)
+                {
+                    CObjectId ekuObjectId = new ();
+                    ekuObjectId.InitializeFromValue(eku);
+                    objectIds.Add(ekuObjectId);
+                }
+                x509ExtensionEnhancedKeyUsage.InitializeEncode(objectIds);
+                certRequest.X509Extensions.Add((CX509Extension)x509ExtensionEnhancedKeyUsage);
+            }
             certRequest.Encode();
             return certRequest;
         }

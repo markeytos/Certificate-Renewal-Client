@@ -2,7 +2,8 @@
   "profiles": {
     "DotNetCertAuthSample": {
       "commandName": "Project",
-      "commandLineArgs": "renew -r --LocalStore -d oldpony.local "
+      //"commandLineArgs": " renew -s \"CN=server1.contoso.com\" --LocalStore --EZCAInstance https://localhost:5001/"//https://ezcaeastuswin-testslot.azurewebsites.net/ "
+      "commandLineArgs": "createDC  -s \"CN=server1.contoso.com OU=Domain Controllers, DC=contoso DC=com\" -d oldpony.local --caid b8d67f6a-ce48-4110-a959-fa92bf249936 --TemplateID b3d16c72-213e-4e40-9de9-78381440bda7 -v 20  --EZCAInstance https://localhost:5001/"
     }
   }
 }
