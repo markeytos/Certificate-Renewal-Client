@@ -49,9 +49,9 @@ If your domain is already registered in EZCA (either by calling the register fun
   --version             Display version information.
 ```
 Sample call:
-```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30```
+```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL --caid "MY CAID From EZCA Certificate Authority Details" -v 30```
 Once again if you want to use this certificate for RDP we must add ```--LocalStore -r```:
-```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL -caid "MY CAID From EZCA Certificate Authority Details" -v 30 --LocalStore -r```
+```.\EZCACertManager.exe create -d MYDOMAIN.LOCAL --caid "MY CAID From EZCA Certificate Authority Details" -v 30 --LocalStore -r```
 ## Create a Domain Controller Certificate
 If you are trying to go passwordless with [hello for business hybrid key trust deployment](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/hello-hybrid-key-trust), you can use this application to [request the domain controller certificate](https://docs.keytos.io/azure-pki/intune-certificate-authority/domain-controller-certificates-for-windows-hello-hybrid/#using-the-application).
 The following options are available for this command:
@@ -104,9 +104,9 @@ Once a certificate has been created and is in your Windows store, we recommend s
   --version             Display version information.
 ```
 Sample call:
-```.\EZCACertManager.exe renew -d mydomain.com```
+```.\EZCACertManager.exe renew -s mydomain.com```
 Same as the other commands, if you want to serve this certificate when a computer tries to RDP to this endpoint, we must add ```--LocalStore -r```:
-```.\EZCACertManager.exe renew -d mydomain.com --LocalStore -r```
+```.\EZCACertManager.exe renew -s mydomain.com --LocalStore -r```
 
 ## Download Signed Binary 
 https://www.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 
