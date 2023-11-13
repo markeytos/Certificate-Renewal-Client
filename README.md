@@ -109,4 +109,4 @@ Same as the other commands, if you want to serve this certificate when a compute
 ```.\EZCACertManager.exe renew -s mydomain.com --LocalStore -r```
 
 ## Download Signed Binary 
-https://www.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 
+https://download.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 
