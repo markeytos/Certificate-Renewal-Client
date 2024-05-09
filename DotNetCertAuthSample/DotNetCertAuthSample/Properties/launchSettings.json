@@ -3,7 +3,7 @@
     "DotNetCertAuthSample": {
       "commandName": "Project",
       //"commandLineArgs": " renew -s \"CN=server1.contoso.com\" --LocalStore --EZCAInstance https://localhost:5001/"//https://ezcaeastuswin-testslot.azurewebsites.net/ "
-      "commandLineArgs": "createDC  -s \"CN=server1.contoso.com OU=Domain Controllers, DC=contoso DC=com\" -d oldpony.local --caid b8d67f6a-ce48-4110-a959-fa92bf249936 --TemplateID b3d16c72-213e-4e40-9de9-78381440bda7 -v 20  --EZCAInstance https://localhost:5001/"
+      "commandLineArgs": "createDC  -s \"CN=server1.contoso.com OU=Domain Controllers, DC=contoso DC=com\" --caid 5a301941-1a9c-479f-ac56-19201d4b437f --TemplateID a2946d14-1c4d-4a09-b672-23250a7a8d7e -v 20  --EZCAInstance https://localhost:5001/"
     }
   }
 }
