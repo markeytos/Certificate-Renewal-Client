@@ -196,6 +196,7 @@ public class CertificateManager
         }
         catch (Exception ex)
         {
+            Console.WriteLine("Error creating certificate: " + ex.Message);
             _logger.LogError(ex, "Error creating certificate");
             return 1;
         }
@@ -359,6 +360,7 @@ public class CertificateManager
         }
         catch (Exception ex)
         {
+            Console.WriteLine("Error registering domain: " + ex.Message);
             _logger.LogError(ex, "Error registering domain");
             return 1;
         }
@@ -415,11 +417,11 @@ public class CertificateManager
         }
         if (validity <= 0)
         {
-            throw new ArgumentOutOfRangeException(
+            throw new ArgumentOutOfRangeException(nameof(validity),
                 "Error certificate validity has to be greater than 0"
             );
         }
-        List<string> subjectAltNames = new List<string> { domain };
+        List<string> subjectAltNames = [domain];
         if (
             !subjectName.StartsWith("CN=", StringComparison.InvariantCultureIgnoreCase)
             && !subjectName.StartsWith("CN =", StringComparison.InvariantCultureIgnoreCase)
@@ -486,10 +488,7 @@ public class CertificateManager
             );
             return windowsCert;
         }
-        else
-        {
-            throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
-        }
+        throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
     }
 
     private static async Task<AvailableCAModel> GetCAAsync(string caID, IEZCAClient ezcaClient)
@@ -509,7 +508,7 @@ public class CertificateManager
         return selectedCA;
     }
 
-    private static TokenCredential? CreateTokenCredential(
+    private static TokenCredential CreateTokenCredential(
         string clientID,
         string clientSecret,
         string tenantID
@@ -526,7 +525,7 @@ public class CertificateManager
         return new ClientSecretCredential(tenantID, clientID, clientSecret);
     }
 
-    private static TokenCredential? CreateTokenCredential(bool azureCLI)
+    private static TokenCredential CreateTokenCredential(bool azureCLI)
     {
         if (azureCLI)
         {
@@ -554,14 +553,13 @@ public class CertificateManager
         return serviceProvider.GetRequiredService<ILogger<Program>>();
     }
 
-    public static bool IsGuid(string value)
+    private static bool IsGuid(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return false;
         }
-        Guid x;
-        return Guid.TryParse(value, out x);
+        return Guid.TryParse(value, out _);
     }
 
     private static List<string> GetSubjectAlternativeName(X509Certificate2 cert)
