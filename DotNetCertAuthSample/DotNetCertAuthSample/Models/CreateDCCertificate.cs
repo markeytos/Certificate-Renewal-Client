@@ -1,10 +1,4 @@
-﻿using CommandLine.Text;
-using CommandLine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using CommandLine;
 using EZCAClient.Models;
 
 namespace DotNetCertAuthSample.Models;
@@ -12,10 +6,10 @@ namespace DotNetCertAuthSample.Models;
 [Verb("createDC", HelpText = "Creates a new Domain Controller certificate. Note: this must be run from a PKI Administrator Account")]
 public class CreateDCCertificate
 {
-    [Option('d', "DNS", Required = true,
+    [Option('d', "DNS",
             HelpText = "DNS Entry for this Domain Controller")]
     public string? Domain { get; set; }
-    [Option('s', "SubjectName", Required = true,
+    [Option('s', "SubjectName",
             HelpText = "Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain Controllers DC=contoso DC=com")]
     public string? SubjectName { get; set; }
     [Option("caid", Required = true,

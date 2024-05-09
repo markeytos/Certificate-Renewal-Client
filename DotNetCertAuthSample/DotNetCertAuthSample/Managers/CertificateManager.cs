@@ -1,4 +1,5 @@
-﻿using Azure.Core;
+﻿using System.DirectoryServices.AccountManagement;
+using Azure.Core;
 using Azure.Identity;
 using CERTENROLLLib;
 using CommandLine;
@@ -11,16 +12,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace DotNetCertAuthSample.Managers;
 
@@ -99,7 +95,7 @@ public class CertificateManager
         }
         try
         {
-            if (values.RDPCert && values.LocalCertStore == false)
+            if (values is { RDPCert: true, LocalCertStore: false })
             {
                 throw new ArgumentException(
                     "If certificate will be used for RDP it must be stored in the local store");
@@ -156,7 +152,11 @@ public class CertificateManager
             }
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
-                throw new ArgumentNullException(nameof(values.Domain));
+                values.Domain = GetFQDN();
+                if (string.IsNullOrWhiteSpace(values.Domain))
+                {
+                    throw new ArgumentNullException(nameof(values.Domain));
+                }
             }
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(), _logger, values.url, CreateTokenCredential(
@@ -164,11 +164,11 @@ public class CertificateManager
             _logger.LogInformation("Getting available CAs");
             Console.WriteLine("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
-            List<string> ekus = new ()
-            {
+            List<string> ekus =
+            [
                 EZCAConstants.ServerAuthenticationEKU,
-                EZCAConstants.ClientAuthenticationEKU,
-            };
+                EZCAConstants.ClientAuthenticationEKU
+            ];
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
                 values.Domain, values.Domain, values.LocalCertStore, selectedCA,
                 values.Validity, ezcaClient, false, ekus);
@@ -204,11 +204,20 @@ public class CertificateManager
             }
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
-                throw new ArgumentNullException(nameof(values.Domain));
+                values.Domain = GetFQDN();
+                if (string.IsNullOrWhiteSpace(values.Domain))
+                {
+                    throw new ArgumentNullException(nameof(values.Domain));
+                }
             }
             if (string.IsNullOrWhiteSpace(values.SubjectName))
             {
-                throw new ArgumentNullException(nameof(values.SubjectName));
+                values.SubjectName = GetComputerSubjectName();
+                if (string.IsNullOrWhiteSpace(values.SubjectName))
+                {
+                    throw new ArgumentNullException(nameof(values.SubjectName), 
+                        "Please enter a valid Subject Name");
+                }
             }
             if(values.EKUs == null || values.EKUs.Any() == false)
             {
@@ -230,9 +239,58 @@ public class CertificateManager
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating domain controller certificate");
+            Console.WriteLine("Error creating certificate: " + ex.Message);
             return 1;
         }
         return 0;
+    }
+    
+    private string GetComputerSubjectName()
+    {
+        string computerName = Dns.GetHostName();
+        string? distinguishedName = GetComputerDistinguishedName(computerName);
+        if (!string.IsNullOrWhiteSpace(distinguishedName))
+        {
+            return distinguishedName;
+        }
+        return GetFQDN(computerName);
+    }
+    
+    private string? GetComputerDistinguishedName(string computerName)
+    {
+        // set up domain context
+        try
+        {
+            var context = new PrincipalContext(ContextType.Domain);
+
+            // find computer
+            var computer = ComputerPrincipal.FindByIdentity(context, computerName);
+
+            if (computer != null)
+            {
+                // get the Distinguished Name
+                return computer.DistinguishedName;
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Error getting computer distinguished name " + e.Message);
+            _logger?.LogError(e, "Error getting computer distinguished name");
+        }
+        return null;
+    }
+        
+    private static string GetFQDN(string computerName = "")
+    {
+        // Get the host entry for the local computer.
+        if (string.IsNullOrWhiteSpace(computerName))
+        {
+            computerName = Dns.GetHostName();
+        }
+        var hostEntry = Dns.GetHostEntry(computerName);
+        
+        // Return the first DNS name assigned to this address (should be the FQDN).
+        return hostEntry.HostName;
     }
 
     private async Task<int> RegisterAndCreateCertAsync(RegisterArgModel values)
@@ -249,7 +307,11 @@ public class CertificateManager
             }
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
-                throw new ArgumentNullException(nameof(values.Domain));
+                values.Domain = GetFQDN();
+                if (string.IsNullOrWhiteSpace(values.Domain))
+                {
+                    throw new ArgumentNullException(nameof(values.Domain));
+                }
             }
             IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), 
                 _logger, values.url);

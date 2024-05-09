@@ -1,10 +1,4 @@
-﻿using CommandLine.Text;
-using CommandLine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using CommandLine;
 
 namespace DotNetCertAuthSample.Models
 {
@@ -12,7 +6,7 @@ namespace DotNetCertAuthSample.Models
     public class RegisterArgModel
     {
 
-        [Option('d', "Domain", Required = true,
+        [Option('d', "Domain", 
             HelpText = "Domain for the certificate you want to create")]
         public string? Domain { get; set; }
         [Option("AppInsights", Required = false,
