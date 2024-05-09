@@ -1,11 +1,14 @@
-﻿using CERTENROLLLib;
-using System.Security.Cryptography.X509Certificates;
+﻿using System.Security.Cryptography.X509Certificates;
+using CERTENROLLLib;
 
 namespace DotNetCertAuthSample.Services
 {
     public static class WindowsCertStoreService
     {
-        public static X509Certificate2 GetCertFromWinStoreBySubject(string subjectName, bool localStore)
+        public static X509Certificate2 GetCertFromWinStoreBySubject(
+            string subjectName,
+            bool localStore
+        )
         {
             X509Store store;
             if (localStore)
@@ -19,7 +22,10 @@ namespace DotNetCertAuthSample.Services
             X509Certificate2? cert = null;
             store.Open(OpenFlags.ReadOnly);
             X509Certificate2Collection certs = store.Certificates.Find(
-                X509FindType.FindBySubjectName, subjectName, true);
+                X509FindType.FindBySubjectName,
+                subjectName,
+                true
+            );
             if (certs.Count > 0)
             {
                 cert = certs.OrderByDescending(i => i.NotAfter).First();
@@ -27,7 +33,11 @@ namespace DotNetCertAuthSample.Services
             else
             {
                 X509Certificate2Collection allStoreCertificates = store.Certificates;
-                foreach (X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i => i.NotAfter))
+                foreach (
+                    X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
+                        i.NotAfter
+                    )
+                )
                 {
                     if (storeCert.Subject.Contains(subjectName))
                     {
@@ -38,8 +48,10 @@ namespace DotNetCertAuthSample.Services
             }
             if (cert == null)
             {
-                throw new FileNotFoundException($"Could not find certificate for domain {subjectName} " +
-                    $"in the {StoreString(localStore)}");
+                throw new FileNotFoundException(
+                    $"Could not find certificate for domain {subjectName} "
+                        + $"in the {StoreString(localStore)}"
+                );
             }
             return cert;
         }
@@ -51,7 +63,10 @@ namespace DotNetCertAuthSample.Services
             X509Certificate2? cert = null;
             store.Open(OpenFlags.ReadOnly);
             X509Certificate2Collection certs = store.Certificates.Find(
-                X509FindType.FindByThumbprint, thumbprint, true);
+                X509FindType.FindByThumbprint,
+                thumbprint,
+                true
+            );
             if (certs.Count > 0)
             {
                 cert = certs[0];
@@ -59,11 +74,16 @@ namespace DotNetCertAuthSample.Services
             return cert;
         }
 
-        public static CX509CertificateRequestPkcs10 CreateCSR(string subjectName, 
-            List<string> sans, int keylength, bool localStore, List<string> ekus)
+        public static CX509CertificateRequestPkcs10 CreateCSR(
+            string subjectName,
+            List<string> sans,
+            int keylength,
+            bool localStore,
+            List<string> ekus
+        )
         {
-            CX509CertificateRequestPkcs10 certRequest = new ();
-            if(localStore)
+            CX509CertificateRequestPkcs10 certRequest = new();
+            if (localStore)
             {
                 certRequest.Initialize(X509CertificateEnrollmentContext.ContextMachine);
             }
@@ -71,7 +91,8 @@ namespace DotNetCertAuthSample.Services
             {
                 certRequest.Initialize(X509CertificateEnrollmentContext.ContextUser);
             }
-            certRequest.PrivateKey.ExportPolicy = X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
+            certRequest.PrivateKey.ExportPolicy =
+                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
             certRequest.PrivateKey.Length = keylength;
             certRequest.PrivateKey.KeyUsage = X509PrivateKeyUsageFlags.XCN_NCRYPT_ALLOW_ALL_USAGES;
             certRequest.PrivateKey.KeySpec = X509KeySpec.XCN_AT_NONE;
@@ -81,23 +102,23 @@ namespace DotNetCertAuthSample.Services
             certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
             objDN.Encode(subjectName, X500NameFlags.XCN_CERT_NAME_STR_NONE);
             certRequest.Subject = objDN;
-            // Key Usage Extension 
+            // Key Usage Extension
             CX509ExtensionKeyUsage extensionKeyUsage = new CX509ExtensionKeyUsage();
             extensionKeyUsage.InitializeEncode(
-                CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE |
-                CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE 
+                CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
+                    | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE
             );
 
             certRequest.X509Extensions.Add((CX509Extension)extensionKeyUsage);
 
             // Enhanced Key Usage Extension
-            CObjectIds objectIds = new ();
-            if(ekus.Any())
+            CObjectIds objectIds = new();
+            if (ekus.Any())
             {
                 CX509ExtensionEnhancedKeyUsage x509ExtensionEnhancedKeyUsage = new();
-                foreach(string eku in ekus)
+                foreach (string eku in ekus)
                 {
-                    CObjectId ekuObjectId = new ();
+                    CObjectId ekuObjectId = new();
                     ekuObjectId.InitializeFromValue(eku);
                     objectIds.Add(ekuObjectId);
                 }
@@ -108,9 +129,12 @@ namespace DotNetCertAuthSample.Services
             return certRequest;
         }
 
-        public static void InstallCertificate(string cert, CX509CertificateRequestPkcs10 certRequest)
+        public static void InstallCertificate(
+            string cert,
+            CX509CertificateRequestPkcs10 certRequest
+        )
         {
-            CX509Enrollment objEnroll = new ();
+            CX509Enrollment objEnroll = new();
             objEnroll.InitializeFromRequest(certRequest);
             objEnroll.CreateRequest(EncodingType.XCN_CRYPT_STRING_BASE64);
             objEnroll.InstallResponse(
@@ -123,12 +147,12 @@ namespace DotNetCertAuthSample.Services
 
         private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
         {
-            CAlternativeNames objAlternativeNames = new ();
+            CAlternativeNames objAlternativeNames = new();
             CX509ExtensionAlternativeNames objExtensionAlternativeNames = new();
 
             foreach (string sanSTR in sans)
             {
-                CAlternativeName san = new ();
+                CAlternativeName san = new();
                 san.InitializeFromString(AlternativeNameType.XCN_CERT_ALT_NAME_DNS_NAME, sanSTR);
                 objAlternativeNames.Add(san);
             }
@@ -143,7 +167,6 @@ namespace DotNetCertAuthSample.Services
                 return "local store";
             }
             return "user store";
-
         }
     }
 }
