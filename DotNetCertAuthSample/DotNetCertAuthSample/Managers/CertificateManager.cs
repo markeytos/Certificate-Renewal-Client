@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
 using CERTENROLLLib;
@@ -21,7 +20,6 @@ using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
-using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 
 namespace DotNetCertAuthSample.Managers;
 
@@ -569,7 +567,7 @@ public class CertificateManager
         return Guid.TryParse(value, out _);
     }
     
-    public static List<X509SubjectAlternativeName> GetSubjectAlternativeNames(
+    private static List<X509SubjectAlternativeName> GetSubjectAlternativeNames(
         X509Certificate2 certificate
     )
     {
@@ -594,9 +592,7 @@ public class CertificateManager
                 {
                     case GeneralName.Rfc822Name:
                         x509SubjectAlternativeName.Type = SANTypes.Rfc822Name;
-                        x509SubjectAlternativeName.Value = (
-                            (DLSequence)generalName.Name
-                        ).ToString();
+                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
                         break;
                     case GeneralName.DnsName:
                         x509SubjectAlternativeName.Type = SANTypes.DNSName;
@@ -612,13 +608,26 @@ public class CertificateManager
                         break;
                     case GeneralName.IPAddress:
                         x509SubjectAlternativeName.Type = SANTypes.IPAddress;
-                        x509SubjectAlternativeName.Value = ((DerOctetString)generalName.Name)
-                            .GetOctets()
-                            .ToString() ?? "";
+                        x509SubjectAlternativeName.Value = string.Join(
+                            ".",
+                            ((DerOctetString)generalName.Name).GetOctets()
+                        );
                         break;
                     case GeneralName.OtherName:
                         x509SubjectAlternativeName.Type = SANTypes.OtherName;
-                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        var sequence = Asn1Sequence.GetInstance(generalName.Name);
+                        var oid = DerObjectIdentifier.GetInstance(sequence[0]);
+                        if (oid.Id == "1.3.6.1.4.1.311.20.2.3") // OID for UPN
+                        {
+                            var upn = DerUtf8String.GetInstance(
+                                Asn1TaggedObject.GetInstance(sequence[1]).GetBaseObject()
+                            );
+                            x509SubjectAlternativeName.Value = upn.GetString();
+                        }
+                        else
+                        {
+                            x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        }
                         break;
                     default:
                         x509SubjectAlternativeName.Type = SANTypes.Unknown;
@@ -629,6 +638,7 @@ public class CertificateManager
                 subjectAlternativeNames.Add(x509SubjectAlternativeName);
             }
         }
+
         return subjectAlternativeNames;
     }
 }
