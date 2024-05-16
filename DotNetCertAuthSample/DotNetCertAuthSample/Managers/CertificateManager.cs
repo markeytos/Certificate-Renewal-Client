@@ -17,6 +17,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.X509;
+using Org.BouncyCastle.X509.Extension;
+using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 
 namespace DotNetCertAuthSample.Managers;
 
@@ -110,7 +115,9 @@ public class CertificateManager
             );
             CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
-                GetSubjectAlternativeName(cert),
+                GetSubjectAlternativeNames(cert).Where(i => i.Type == SANTypes.DNSName)
+                    .Select(i => i.Value)
+                    .ToList(),
                 4096,
                 values.LocalCertStore,
                 new()
@@ -561,37 +568,67 @@ public class CertificateManager
         }
         return Guid.TryParse(value, out _);
     }
-
-    private static List<string> GetSubjectAlternativeName(X509Certificate2 cert)
+    
+    public static List<X509SubjectAlternativeName> GetSubjectAlternativeNames(
+        X509Certificate2 certificate
+    )
     {
-        var result = new List<string>();
-        var subjectAlternativeName = cert
-            .Extensions.Cast<X509Extension>()
-            .Where(n => n.Oid?.Value == "2.5.29.17")
-            .Select(n => new AsnEncodedData(n.Oid, n.RawData))
-            .Select(n => n.Format(true))
-            .FirstOrDefault();
-        if (subjectAlternativeName != null)
-        {
-            var alternativeNames = subjectAlternativeName.Split(
-                new[] { "\r\n", "\r", "\n" },
-                StringSplitOptions.None
-            );
+        var subjectAlternativeNames = new List<X509SubjectAlternativeName>();
 
-            foreach (var alternativeName in alternativeNames)
+        // Convert X509Certificate2 to Bouncy Castle X509Certificate
+        var parser = new X509CertificateParser();
+        var bcCert = parser.ReadCertificate(certificate.RawData);
+
+        // Get the SubjectAlternativeNames extension
+        var sanExtension = bcCert.GetExtensionValue(X509Extensions.SubjectAlternativeName);
+
+        if (sanExtension != null)
+        {
+            var asn1Object = X509ExtensionUtilities.FromExtensionValue(sanExtension);
+            var generalNames = GeneralNames.GetInstance(asn1Object);
+
+            foreach (var generalName in generalNames.GetNames())
             {
-                var groups = Regex.Match(alternativeName, @"^(.*)=(.*)").Groups; // @"^DNS Name=(.*)").Groups;
-                var groups2 = Regex.Match(alternativeName, @"^(.*):(.*)").Groups; // @"^DNS Name:(.*)").Groups;
-                if (groups.Count > 1 && !string.IsNullOrWhiteSpace(groups[2].Value))
+                X509SubjectAlternativeName x509SubjectAlternativeName = new();
+                switch (generalName.TagNo)
                 {
-                    result.Add(groups[2].Value.Trim());
+                    case GeneralName.Rfc822Name:
+                        x509SubjectAlternativeName.Type = SANTypes.Rfc822Name;
+                        x509SubjectAlternativeName.Value = (
+                            (DLSequence)generalName.Name
+                        ).ToString();
+                        break;
+                    case GeneralName.DnsName:
+                        x509SubjectAlternativeName.Type = SANTypes.DNSName;
+                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        break;
+                    case GeneralName.UniformResourceIdentifier:
+                        x509SubjectAlternativeName.Type = SANTypes.URI;
+                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        break;
+                    case GeneralName.DirectoryName:
+                        x509SubjectAlternativeName.Type = SANTypes.DirectoryName;
+                        x509SubjectAlternativeName.Value = ((X509Name)generalName.Name).ToString();
+                        break;
+                    case GeneralName.IPAddress:
+                        x509SubjectAlternativeName.Type = SANTypes.IPAddress;
+                        x509SubjectAlternativeName.Value = ((DerOctetString)generalName.Name)
+                            .GetOctets()
+                            .ToString() ?? "";
+                        break;
+                    case GeneralName.OtherName:
+                        x509SubjectAlternativeName.Type = SANTypes.OtherName;
+                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        break;
+                    default:
+                        x509SubjectAlternativeName.Type = SANTypes.Unknown;
+                        x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
+                        break;
                 }
-                else if (groups2.Count > 1 && !string.IsNullOrWhiteSpace(groups2[2].Value))
-                {
-                    result.Add(groups2[2].Value.Trim());
-                }
+
+                subjectAlternativeNames.Add(x509SubjectAlternativeName);
             }
         }
-        return result;
+        return subjectAlternativeNames;
     }
 }
