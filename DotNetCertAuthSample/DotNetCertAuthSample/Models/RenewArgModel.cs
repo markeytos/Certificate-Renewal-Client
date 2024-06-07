@@ -45,5 +45,23 @@ namespace DotNetCertAuthSample.Models
             HelpText = "If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store"
         )]
         public bool LocalCertStore { get; set; }
+
+        [Option(
+            't',
+            "Template",
+            Required = false,
+            Default = "",
+            HelpText = "Certificate Template Name"
+        )]
+        public string template { get; set; } = "";
+
+        [Option(
+            'i',
+            "Issuer",
+            Required = false,
+            Default = "",
+            HelpText = "Certificate Issuer Name"
+        )]
+        public string issuer { get; set; } = "";
     }
 }

@@ -1,6 +1,5 @@
 namespace DotNetCertAuthSample.Models;
 
-
 public class X509SubjectAlternativeName
 {
     public SANTypes Type { get; set; }

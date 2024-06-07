@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography.X509Certificates;
+﻿using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
 
 namespace DotNetCertAuthSample.Services
@@ -7,7 +8,9 @@ namespace DotNetCertAuthSample.Services
     {
         public static X509Certificate2 GetCertFromWinStoreBySubject(
             string subjectName,
-            bool localStore
+            bool localStore,
+            string issuerName = "",
+            string templateName = ""
         )
         {
             X509Store store;
@@ -28,7 +31,19 @@ namespace DotNetCertAuthSample.Services
             );
             if (certs.Count > 0)
             {
-                cert = certs.OrderByDescending(i => i.NotAfter).First();
+                if (!string.IsNullOrWhiteSpace(templateName))
+                {
+                    cert = certs
+                        .Find(X509FindType.FindByTemplateName, templateName, true)
+                        .FirstOrDefault();
+                }
+                else if (!string.IsNullOrWhiteSpace(issuerName))
+                {
+                    cert = certs
+                        .Find(X509FindType.FindByIssuerName, issuerName, true)
+                        .FirstOrDefault();
+                }
+                cert ??= certs.OrderByDescending(i => i.NotAfter).First();
             }
             else
             {
@@ -39,7 +54,11 @@ namespace DotNetCertAuthSample.Services
                     )
                 )
                 {
-                    if (storeCert.Subject.Contains(subjectName))
+                    if (
+                        CheckCertificateTemplate(storeCert, templateName)
+                        && CheckCertificateIssuer(storeCert, issuerName)
+                        && storeCert.Subject.Contains(subjectName)
+                    )
                     {
                         cert = storeCert;
                         break;
@@ -167,6 +186,38 @@ namespace DotNetCertAuthSample.Services
                 return "local store";
             }
             return "user store";
+        }
+
+        private static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
+        {
+            if (string.IsNullOrWhiteSpace(templateName))
+            {
+                return true;
+            }
+            string? certTemplateName = GetCertificateTemplateName(cert);
+            return templateName.Equals(certTemplateName?.Trim());
+        }
+
+        private static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
+        {
+            if (string.IsNullOrWhiteSpace(issuerName))
+            {
+                return true;
+            }
+            return cert.Issuer.Contains(issuerName);
+        }
+
+        private static string? GetCertificateTemplateName(X509Certificate2 certificate)
+        {
+            foreach (var extension in certificate.Extensions)
+            {
+                if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
+                {
+                    AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
+                    return asnData.Format(true);
+                }
+            }
+            return null;
         }
     }
 }

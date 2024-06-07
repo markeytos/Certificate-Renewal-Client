@@ -109,11 +109,14 @@ public class CertificateManager
             }
             X509Certificate2 cert = WindowsCertStoreService.GetCertFromWinStoreBySubject(
                 values.Domain.Replace("CN=", "").Trim(),
-                values.LocalCertStore
+                values.LocalCertStore,
+                values.issuer,
+                values.template
             );
             CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
-                GetSubjectAlternativeNames(cert).Where(i => i.Type == SANTypes.DNSName)
+                GetSubjectAlternativeNames(cert)
+                    .Where(i => i.Type == SANTypes.DNSName)
                     .Select(i => i.Value)
                     .ToList(),
                 4096,
@@ -422,7 +425,8 @@ public class CertificateManager
         }
         if (validity <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(validity),
+            throw new ArgumentOutOfRangeException(
+                nameof(validity),
                 "Error certificate validity has to be greater than 0"
             );
         }
@@ -566,7 +570,7 @@ public class CertificateManager
         }
         return Guid.TryParse(value, out _);
     }
-    
+
     private static List<X509SubjectAlternativeName> GetSubjectAlternativeNames(
         X509Certificate2 certificate
     )
