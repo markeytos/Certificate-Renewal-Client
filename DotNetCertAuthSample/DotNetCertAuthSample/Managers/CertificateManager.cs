@@ -107,6 +107,10 @@ public class CertificateManager
             {
                 throw new ArgumentNullException(nameof(values.Domain));
             }
+            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            {
+                throw new ArgumentException("Key length must be 2048 or 4096");
+            }
             X509Certificate2 cert = WindowsCertStoreService.GetCertFromWinStoreBySubject(
                 values.Domain.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
@@ -119,7 +123,7 @@ public class CertificateManager
                     .Where(i => i.Type == SANTypes.DNSName)
                     .Select(i => i.Value)
                     .ToList(),
-                4096,
+                values.KeyLength,
                 values.LocalCertStore,
                 new()
             );
@@ -173,6 +177,10 @@ public class CertificateManager
                     throw new ArgumentNullException(nameof(values.Domain));
                 }
             }
+            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            {
+                throw new ArgumentException("Key length must be 2048 or 4096");
+            }
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(),
                 _logger,
@@ -195,7 +203,8 @@ public class CertificateManager
                 values.Validity,
                 ezcaClient,
                 false,
-                ekus
+                ekus,
+                values.KeyLength
             );
             if (values.RDPCert)
             {
@@ -256,6 +265,10 @@ public class CertificateManager
                 values.url,
                 CreateTokenCredential(values.AzureCLI)
             );
+            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            {
+                throw new ArgumentException("Key length must be 2048 or 4096");
+            }
             AvailableCAModel selectedCA =
                 new() { CAID = values.caID, TemplateID = values.TemplateID, };
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
@@ -267,6 +280,7 @@ public class CertificateManager
                 ezcaClient,
                 true,
                 values.EKUs,
+                values.KeyLength,
                 values.DCGUID
             );
         }
@@ -416,6 +430,7 @@ public class CertificateManager
         IEZCAClient ezcaClient,
         bool dcCertificate,
         List<string> ekus,
+        int keyLength,
         string dcGUID = ""
     )
     {
@@ -430,6 +445,10 @@ public class CertificateManager
                 "Error certificate validity has to be greater than 0"
             );
         }
+        if(keyLength != 2048 && keyLength != 4096)
+        {
+            throw new ArgumentException("Key length must be 2048 or 4096");
+        }
         List<string> subjectAltNames = [domain];
         if (
             !subjectName.StartsWith("CN=", StringComparison.InvariantCultureIgnoreCase)
@@ -441,7 +460,7 @@ public class CertificateManager
         CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
-            4096,
+            keyLength,
             localStore,
             ekus
         );

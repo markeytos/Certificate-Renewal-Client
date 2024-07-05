@@ -74,5 +74,8 @@ namespace DotNetCertAuthSample.Models
                 + "you Azure TenantID, the Application ID and the Application Secret"
         )]
         public string ClientSecret { get; set; } = "";
+        
+        [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
+        public int KeyLength { get; set; } = 4096;
     }
 }

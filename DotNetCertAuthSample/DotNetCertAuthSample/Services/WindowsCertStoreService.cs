@@ -102,14 +102,9 @@ namespace DotNetCertAuthSample.Services
         )
         {
             CX509CertificateRequestPkcs10 certRequest = new();
-            if (localStore)
-            {
-                certRequest.Initialize(X509CertificateEnrollmentContext.ContextMachine);
-            }
-            else
-            {
-                certRequest.Initialize(X509CertificateEnrollmentContext.ContextUser);
-            }
+            certRequest.Initialize(localStore
+                ? X509CertificateEnrollmentContext.ContextMachine
+                : X509CertificateEnrollmentContext.ContextUser);
             certRequest.PrivateKey.ExportPolicy =
                 X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
             certRequest.PrivateKey.Length = keylength;

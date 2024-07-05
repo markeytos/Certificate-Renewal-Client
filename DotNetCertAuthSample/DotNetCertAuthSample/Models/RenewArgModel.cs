@@ -63,5 +63,7 @@ namespace DotNetCertAuthSample.Models
             HelpText = "Certificate Issuer Name"
         )]
         public string issuer { get; set; } = "";
+        [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
+        public int KeyLength { get; set; } = 4096;
     }
 }

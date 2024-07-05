@@ -76,4 +76,7 @@ public class CreateDCCertificate
         HelpText = "Use Azure CLI as authentication method"
     )]
     public bool AzureCLI { get; set; } = false;
+    
+    [Option('k', "KeyLength",  HelpText = "Certificate Key Length", Default = 4096)]
+    public int KeyLength { get; set; } = 4096;
 }
