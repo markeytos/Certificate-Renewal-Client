@@ -111,6 +111,10 @@ public class CertificateManager
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
+            if (string.IsNullOrWhiteSpace(values.sid))
+            {
+                throw new ArgumentException("Please enter a valid SID");
+            }
             X509Certificate2 cert = WindowsCertStoreService.GetCertFromWinStoreBySubject(
                 values.Domain.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
@@ -262,6 +266,10 @@ public class CertificateManager
             {
                 values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
             }
+            if (string.IsNullOrWhiteSpace(values.sid))
+            {
+                throw new ArgumentException("Please enter a valid SID");
+            }
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(),
                 _logger,
@@ -284,6 +292,8 @@ public class CertificateManager
                 true,
                 values.EKUs,
                 values.KeyLength,
+                values.DCGUID,
+                values.sid
                 values.DCGUID,
                 values.KeyProvider
             );
@@ -436,6 +446,8 @@ public class CertificateManager
         List<string> ekus,
         int keyLength,
         string dcGUID = "",
+        string sid = ""
+        string dcGUID = "",
         string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
     )
     {
@@ -467,8 +479,7 @@ public class CertificateManager
             subjectAltNames,
             keyLength,
             localStore,
-            ekus,
-            keyProvider
+            ekus
         );
         string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
         X509Certificate2? windowsCert;
