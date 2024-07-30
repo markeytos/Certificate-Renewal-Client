@@ -125,7 +125,8 @@ public class CertificateManager
                     .ToList(),
                 values.KeyLength,
                 values.LocalCertStore,
-                new()
+                new(),
+                values.KeyProvider
             );
             string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
             _logger.LogInformation($"Renewing certificate");
@@ -159,7 +160,7 @@ public class CertificateManager
         }
         try
         {
-            if (values.RDPCert && values.LocalCertStore == false)
+            if (values is { RDPCert: true, LocalCertStore: false })
             {
                 throw new ArgumentException(
                     "If certificate will be used for RDP it must be stored in the local store"
@@ -204,7 +205,9 @@ public class CertificateManager
                 ezcaClient,
                 false,
                 ekus,
-                values.KeyLength
+                values.KeyLength,
+                "",
+                values.KeyProvider
             );
             if (values.RDPCert)
             {
@@ -281,7 +284,8 @@ public class CertificateManager
                 true,
                 values.EKUs,
                 values.KeyLength,
-                values.DCGUID
+                values.DCGUID,
+                values.KeyProvider
             );
         }
         catch (Exception ex)
@@ -431,7 +435,8 @@ public class CertificateManager
         bool dcCertificate,
         List<string> ekus,
         int keyLength,
-        string dcGUID = ""
+        string dcGUID = "",
+        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
     )
     {
         if (_logger == null)
@@ -462,7 +467,8 @@ public class CertificateManager
             subjectAltNames,
             keyLength,
             localStore,
-            ekus
+            ekus,
+            keyProvider
         );
         string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
         X509Certificate2? windowsCert;
