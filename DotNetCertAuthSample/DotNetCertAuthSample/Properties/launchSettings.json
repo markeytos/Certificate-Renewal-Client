@@ -2,8 +2,8 @@
   "profiles": {
     "DotNetCertAuthSample": {
       "commandName": "Project",
-      "commandLineArgs": " renew -s \"CN=server3.contoso.com\" -i \"SCEP Any Root  Extras\" --LocalStore --EZCAInstance https://localhost:5001/ -k 2048" //https://ezcaeastuswin-testslot.azurewebsites.net/ "
-//     "commandLineArgs": "createDC  -s \"CN=server3.contoso.com-tpm\" --caid 077cfd01-82ee-40bd-b709-f0f9b9d8f996  -k 2048  --TemplateID e04ee1d3-d8bf-45c8-9f66-374015555c3e -v 20 -g 5a301941-1a9c-479f-ac56-19201d4b437f  -p \"Microsoft Platform Crypto Provider\" --EZCAInstance https://localhost:5001/"
+//      "commandLineArgs": " renew -s \"CN=server3.contoso.com\" -i \"SCEP Any Root  Extras\" --LocalStore --EZCAInstance https://localhost:5001/ -k 2048" //https://ezcaeastuswin-testslot.azurewebsites.net/ "
+     "commandLineArgs": "createDC  -s \"CN=server3.contoso.com-tpm\" --caid 077cfd01-82ee-40bd-b709-f0f9b9d8f996  -k 2048  --TemplateID e04ee1d3-d8bf-45c8-9f66-374015555c3e -v 20 -g 5a301941-1a9c-479f-ac56-19201d4b437f  -p \"Microsoft Platform Crypto Provider\" --EZCAInstance https://localhost:5001/"
     }
   }
 }
