@@ -24,9 +24,9 @@ Sample call:
 
 If your domain is already registered in EZCA (either by calling the register function mentioned above, or by [registering a domain in the EZCA portal](https://docs.keytos.io/azure-pki/registering-a-domain/registering_new_domain/)), you should use the ```create``` option. This option will use a [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet) to authenticate to EZCA and request a certificate. Please ensure that the identity being used to authenticate is registered as a requester for this domain. **Note: unlike with register this can be run by machine identities**
 ```
--r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
+  -r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
 
-  -d, --Domain          Required. Domain for the certificate you want to create
+  -d, --Domain          Domain for the certificate you want to create
 
   --AppInsights         Azure Application Insights connection string to send logs to
 
@@ -34,15 +34,24 @@ If your domain is already registered in EZCA (either by calling the register fun
 
   --caid                Required. CA ID of the CA you want to request the certificate from
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
+                        certificate will be stored in the user store
 
   -v, --Validity        Required. Certificate validity in days
 
-  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the Application Secret
+  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
+                        the Application ID and the Application Secret
 
-  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the Application Secret
+  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
+                        the Application ID and the Application Secret
 
-  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the Application Secret
+  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
+                        the Application ID and the Application Secret
+
+  -k, --KeyLength       (Default: 4096) Certificate Key Length
+
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
+                        Microsoft Enhanced Cryptographic Provider v1.0)
 
   --help                Display this help screen.
 
@@ -56,10 +65,10 @@ Once again if you want to use this certificate for RDP we must add ```--LocalSto
 If you are trying to go passwordless with [hello for business hybrid key trust deployment](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/hello-hybrid-key-trust), you can use this application to [request the domain controller certificate](https://docs.keytos.io/azure-pki/intune-certificate-authority/domain-controller-certificates-for-windows-hello-hybrid/#using-the-application).
 The following options are available for this command:
 ```
-   -d, --DNS             Required. DNS Entry for this Domain Controller
+ -d, --DNS             DNS Entry for this Domain Controller
 
-  -s, --SubjectName     Required. Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain
-                        Controllers DC=contoso DC=com
+  -s, --SubjectName     Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain Controllers
+                        DC=contoso DC=com
 
   --caid                Required. CA ID of the CA you want to request the certificate from
 
@@ -69,8 +78,8 @@ The following options are available for this command:
   -v, --Validity        Required. Certificate validity in days
 
   -g, --DCGUID          Domain Controller GUID. This is only required if SMTP replication is used in your domain. Learn
-                        more:
-                        https://learn.microsoft.com/en-US/troubleshoot/windows-server/windows-security/requirements-doma                        in-controller#how-to-determine-the-domain-controller-guid
+                        more: https://learn.microsoft.com/en-US/troubleshoot/windows-server/windows-security/requirements-doma
+                        in-controller#how-to-determine-the-domain-controller-guid
 
   --AppInsights         Azure Application Insights connection string to send logs to
 
@@ -80,6 +89,15 @@ The following options are available for this command:
                         requested for the certificate
 
   --AzureCLI            (Default: false) Use Azure CLI as authentication method
+
+  -k, --KeyLength       (Default: 4096) Certificate Key Length
+
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
+                        Microsoft Enhanced Cryptographic Provider v1.0)
+
+  --help                Display this help screen.
+
+  --version             Display version information.
 ```
 sample command:
 ``` 
@@ -89,15 +107,25 @@ sample command:
 ## Renew an existing certificate
 Once a certificate has been created and is in your Windows store, we recommend setting a scheduled task running this binary with the renew function to automatically renew your certificate. This uses the existing certificate to authenticate so no need for an AAD identity. For this one the only required option is the ```-d``` with the subject name of the certificate, the console application will use that information to get the certificate from the store you specify and renew it in EZCA.
 ```
- -r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
+  -r, --RDP             (Default: false) whether this certificate should be added as the computer's RDP certificate
 
-  -s, --SubjectName          Required. Domain for the certificate you want to create
+  -s, --SubjectName     Required. SubjectName for the certificate you want to renew
 
   --AppInsights         Azure Application Insights connection string to send logs to
 
   -e, --EZCAInstance    (Default: https://portal.ezca.io/) EZCA instance url
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
+                        certificate will be stored in the user store
+
+  -t, --Template        (Default: ) Certificate Template Name
+
+  -i, --Issuer          (Default: ) Certificate Issuer Name
+
+  -k, --KeyLength       (Default: 4096) Certificate Key Length
+
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
+                        Microsoft Enhanced Cryptographic Provider v1.0)
 
   --help                Display this help screen.
 

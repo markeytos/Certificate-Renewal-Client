@@ -47,6 +47,7 @@ namespace DotNetCertAuthSample.Services
             }
             else
             {
+                List<X509Certificate2> matchingCertificates = new();
                 X509Certificate2Collection allStoreCertificates = store.Certificates;
                 foreach (
                     X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
@@ -60,9 +61,17 @@ namespace DotNetCertAuthSample.Services
                         && storeCert.Subject.Contains(subjectName)
                     )
                     {
-                        cert = storeCert;
-                        break;
+                        matchingCertificates.Add(storeCert);
                     }
+                }
+                if (matchingCertificates.Count == 1)
+                {
+                    cert = matchingCertificates[0];
+                }
+                else if (matchingCertificates.Count > 1)
+                {
+                    cert = matchingCertificates.OrderByDescending(x => x.NotAfter).FirstOrDefault(i => 
+                        i.SubjectName.Name == $"CN={subjectName}") ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
                 }
             }
             if (cert == null)
@@ -98,7 +107,8 @@ namespace DotNetCertAuthSample.Services
             List<string> sans,
             int keylength,
             bool localStore,
-            List<string> ekus
+            List<string> ekus,
+            string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
         )
         {
             CX509CertificateRequestPkcs10 certRequest = new();
@@ -111,6 +121,7 @@ namespace DotNetCertAuthSample.Services
             certRequest.PrivateKey.KeyUsage = X509PrivateKeyUsageFlags.XCN_NCRYPT_ALLOW_ALL_USAGES;
             certRequest.PrivateKey.KeySpec = X509KeySpec.XCN_AT_NONE;
             certRequest.PrivateKey.MachineContext = localStore;
+            certRequest.PrivateKey.ProviderName = KeyProvider;
             certRequest.PrivateKey.Create();
             var objDN = new CX500DistinguishedName();
             certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
