@@ -111,10 +111,6 @@ public class CertificateManager
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
-            if (string.IsNullOrWhiteSpace(values.sid))
-            {
-                throw new ArgumentException("Please enter a valid SID");
-            }
             X509Certificate2 cert = WindowsCertStoreService.GetCertFromWinStoreBySubject(
                 values.Domain.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
@@ -294,7 +290,7 @@ public class CertificateManager
                 values.EKUs,
                 values.KeyLength,
                 values.DCGUID,
-                values.sid
+                values.sid,
                 values.DCGUID,
                 values.KeyProvider
             );
@@ -505,8 +501,7 @@ public class CertificateManager
                 selectedCA,
                 csr,
                 domain,
-                validity,
-                sid
+                validity
             );
         }
 

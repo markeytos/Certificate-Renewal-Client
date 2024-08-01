@@ -77,6 +77,7 @@ namespace DotNetCertAuthSample.Models
         
         [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
         public int KeyLength { get; set; } = 4096;
+        
         [Option(
             'p',
             "KeyProvider",

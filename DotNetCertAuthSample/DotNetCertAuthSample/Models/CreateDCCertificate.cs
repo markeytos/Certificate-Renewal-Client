@@ -86,6 +86,7 @@ public class CreateDCCertificate
         HelpText = "SID for the certificate to be created"
     )]
     public string sid { get; set; } = "";
+    
     [Option(
         'p',
         "KeyProvider",
