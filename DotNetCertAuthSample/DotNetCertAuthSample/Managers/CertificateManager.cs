@@ -206,9 +206,9 @@ public class CertificateManager
                 false,
                 ekus,
                 values.KeyLength,
-                ""
                 "",
-                values.KeyProvider
+                values.KeyProvider,
+                ""
             );
             if (values.RDPCert)
             {
@@ -290,9 +290,8 @@ public class CertificateManager
                 values.EKUs,
                 values.KeyLength,
                 values.DCGUID,
-                values.sid,
-                values.DCGUID,
-                values.KeyProvider
+                values.KeyProvider,
+                values.sid
             );
         }
         catch (Exception ex)
@@ -443,6 +442,7 @@ public class CertificateManager
         List<string> ekus,
         int keyLength,
         string dcGUID = "",
+        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
         string sid = ""
     )
     {
