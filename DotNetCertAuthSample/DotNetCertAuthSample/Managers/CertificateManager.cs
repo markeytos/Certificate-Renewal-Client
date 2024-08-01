@@ -263,10 +263,6 @@ public class CertificateManager
             {
                 values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
             }
-            if (string.IsNullOrWhiteSpace(values.sid))
-            {
-                throw new ArgumentException("Please enter a valid SID");
-            }
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(),
                 _logger,

@@ -80,11 +80,7 @@ public class CreateDCCertificate
     [Option('k', "KeyLength",  HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;
     
-    [Option(
-        "sid", 
-        Required = true, 
-        HelpText = "SID for the certificate to be created"
-    )]
+    [Option("sid", Required = false, HelpText = "SID for the certificate to be created")]
     public string sid { get; set; } = "";
     
     [Option(
