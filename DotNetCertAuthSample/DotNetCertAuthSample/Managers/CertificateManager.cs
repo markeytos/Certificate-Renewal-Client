@@ -474,7 +474,8 @@ public class CertificateManager
             subjectAltNames,
             keyLength,
             localStore,
-            ekus
+            ekus,
+            keyProvider
         );
         string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
         X509Certificate2? windowsCert;
