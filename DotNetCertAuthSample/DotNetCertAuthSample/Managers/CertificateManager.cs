@@ -210,6 +210,7 @@ public class CertificateManager
                 false,
                 ekus,
                 values.KeyLength,
+                ""
                 "",
                 values.KeyProvider
             );
@@ -447,8 +448,6 @@ public class CertificateManager
         int keyLength,
         string dcGUID = "",
         string sid = ""
-        string dcGUID = "",
-        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
     )
     {
         if (_logger == null)
@@ -494,7 +493,8 @@ public class CertificateManager
                 domain,
                 validity,
                 ekus,
-                dcGUID
+                dcGUID,
+                sid
             );
         }
         else
@@ -505,7 +505,8 @@ public class CertificateManager
                 selectedCA,
                 csr,
                 domain,
-                validity
+                validity,
+                sid
             );
         }
 
