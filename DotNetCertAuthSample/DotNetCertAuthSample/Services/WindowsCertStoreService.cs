@@ -43,7 +43,8 @@ namespace DotNetCertAuthSample.Services
                         .Find(X509FindType.FindByIssuerName, issuerName, true)
                         .FirstOrDefault();
                 }
-                cert ??= certs.OrderByDescending(i => i.NotAfter).First();
+                cert ??= certs.OrderByDescending(x => x.NotAfter).FirstOrDefault(i => 
+                    i.SubjectName.Name == $"CN={subjectName}") ?? certs.OrderByDescending(x => x.NotAfter).First();
             }
             else
             {
