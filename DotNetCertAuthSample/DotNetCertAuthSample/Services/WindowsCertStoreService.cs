@@ -151,6 +151,7 @@ namespace DotNetCertAuthSample.Services
                 x509ExtensionEnhancedKeyUsage.InitializeEncode(objectIds);
                 certRequest.X509Extensions.Add((CX509Extension)x509ExtensionEnhancedKeyUsage);
             }
+           
             certRequest.Encode();
             return certRequest;
         }
@@ -169,6 +170,14 @@ namespace DotNetCertAuthSample.Services
                 EncodingType.XCN_CRYPT_STRING_BASE64HEADER,
                 null
             );
+        }
+        
+        public static void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
+        {
+            X509Store store = new(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            store.Add(certificate);
+            store.Close();
         }
 
         private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)

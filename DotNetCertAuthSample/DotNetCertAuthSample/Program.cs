@@ -7,7 +7,7 @@ namespace DotNetCertAuthSample;
 
 public class Program
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
         CertificateManager certificateManager = new();
         int result = Parser
@@ -15,18 +15,21 @@ public class Program
                 RenewArgModel,
                 GenerateArgModel,
                 RegisterArgModel,
-                CreateDCCertificate
+                CreateDCCertificate,
+                SCEPArgModel
             >(args)
             .MapResult(
                 (RenewArgModel operation) => certificateManager.InitializeManager(operation),
                 (GenerateArgModel operation) => certificateManager.InitializeManager(operation),
                 (RegisterArgModel operation) => certificateManager.InitializeManager(operation),
                 (CreateDCCertificate operation) => certificateManager.InitializeManager(operation),
+                (SCEPArgModel operation) => certificateManager.InitializeManager(operation),
                 errs => certificateManager.ProcessError(errs)
             );
         if (result == 0)
         {
-            await certificateManager.CallCertActionAsync();
+            result = await certificateManager.CallCertActionAsync();
         }
+        return result;
     }
 }
