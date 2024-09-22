@@ -16,21 +16,20 @@ public class SCEPArgModel
         HelpText = "If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store"
     )]
     public bool LocalCertStore { get; set; } = true;
-    
+
     [Option(
         "EKUs",
         Required = false,
-        
-        
         Default = "1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1",
         HelpText = "EKUs requested for the certificate"
     )]
     public string? EKUsInputs { get; set; }
-    public List<string> EKUs { get; set; } = [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
-    
-    [Option('k', "KeyLength",  HelpText = "Certificate Key Length", Default = 4096)]
+    public List<string> EKUs { get; set; } =
+        [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
+
+    [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;
-    
+
     [Option(
         "AppInsights",
         Required = false,
@@ -38,15 +37,9 @@ public class SCEPArgModel
     )]
     public string? AppInsightsKey { get; set; }
 
-    [Option(
-        'u',
-        "URL",
-        Required = true,
-        HelpText = "SCEP URL from your EZCA CA"
-    )]
+    [Option('u', "URL", Required = true, HelpText = "SCEP URL from your EZCA CA")]
     public string? url { get; set; }
-    
-    
+
     [Option(
         's',
         "SubjectName",
@@ -54,15 +47,10 @@ public class SCEPArgModel
         HelpText = "Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain Controllers DC=contoso DC=com"
     )]
     public string? SubjectName { get; set; }
-    
-    [Option(
-        'p',
-        "SCEPPassword",
-        Required = true,
-        HelpText = "SCEP Password for Static Challenge"
-    )]
+
+    [Option('p', "SCEPPassword", Required = true, HelpText = "SCEP Password for Static Challenge")]
     public string? SCEPPassword { get; set; }
-    
+
     [Option(
         "SubjectAltNames",
         Required = false,

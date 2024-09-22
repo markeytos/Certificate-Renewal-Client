@@ -2,7 +2,6 @@ using System.Text;
 
 namespace DotNetCertAuthSample.Services;
 
-
 public static class DerEncoding
 {
     /// <summary>
