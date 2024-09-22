@@ -138,6 +138,8 @@ Same as the other commands, if you want to serve this certificate when a compute
 
 ## How to Create SCEP Certificates for Non-Managed Windows Devices
 If you are migrating to the cloud but not all of your devices are cloud managed or MDM managed, you can use this client to request certificates from EZCA using static SCEP for those devices. To Request a Static SCEP certificate, you will need your Static SCEP URL from EZCA, and the Static Challenge, you can find this information in the EZCA portal under the Certificate Authority details.
+![How To Enable Static SCEP](https://github.com/user-attachments/assets/671f54bc-0669-40ab-a1e0-977fce493d22)
+
 ```
    --LocalStore          (Default: true) If the certificate should be stored in the computers Local Store. If false
                         certificate will be stored in the user store
