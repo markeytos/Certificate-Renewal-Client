@@ -76,16 +76,16 @@ public class CreateDCCertificate
         HelpText = "Use Azure CLI as authentication method"
     )]
     public bool AzureCLI { get; set; } = false;
-    
-    [Option('k', "KeyLength",  HelpText = "Certificate Key Length", Default = 4096)]
+
+    [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;
+
     [Option(
         'p',
         "KeyProvider",
         Required = false,
         Default = "Microsoft Enhanced Cryptographic Provider v1.0",
-        HelpText = "Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)" 
-            
+        HelpText = "Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)"
     )]
     public string KeyProvider { get; set; } = "Microsoft Enhanced Cryptographic Provider v1.0";
 }

@@ -136,5 +136,32 @@ Sample call:
 Same as the other commands, if you want to serve this certificate when a computer tries to RDP to this endpoint, we must add ```--LocalStore -r```:
 ```.\EZCACertManager.exe renew -s mydomain.com --LocalStore -r```
 
+## How to Create SCEP Certificates for Non-Managed Windows Devices
+If you are migrating to the cloud but not all of your devices are cloud managed or MDM managed, you can use this client to request certificates from EZCA using static SCEP for those devices. To Request a Static SCEP certificate, you will need your Static SCEP URL from EZCA, and the Static Challenge, you can find this information in the EZCA portal under the Certificate Authority details.
+![How To Enable Static SCEP](https://github.com/user-attachments/assets/671f54bc-0669-40ab-a1e0-977fce493d22)
+
+```
+   --LocalStore          (Default: true) If the certificate should be stored in the computers Local Store. If false
+                        certificate will be stored in the user store
+
+  --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1) EKUs requested for the certificate
+
+  -k, --KeyLength       (Default: 4096) Certificate Key Length
+
+  --AppInsights         Azure Application Insights connection string to send logs to
+
+  -u, --URL             Required. SCEP URL from your EZCA CA
+
+  -s, --SubjectName     Subject Name for this certificate for example: CN=server1.contoso.com OU=Domain Controllers
+                        DC=contoso DC=com (If left empty it will use the computer name in your domain)
+
+  -p, --SCEPPassword    Required. SCEP Password for Static Challenge
+
+  --SubjectAltNames     Subject Alternate Names for this certificate for example (comma separate multiple):
+                        server1.constoso.com,server2.contoso.com (If left empty it will use the computer name in your domain)
+```
+Sample call:
+```.\EZCACertManager.exe SCEPCertificate  -u https://portal.ezca.io/api/SCEP/Static/1c3c6cea-fcbd-4681-85e1-74fb74b6863e/d2e20719-090c-40c9-88a0-d1955ed74f73/eastus/cgi-bin -s "CN=server3.contoso.com" -p YOURPASSWORD  --SubjectAltNames machine.contoso.com,machine2.contoso.com  ```
+
 ## Download Signed Binary 
 https://download.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 

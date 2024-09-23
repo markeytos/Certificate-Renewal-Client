@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using Azure.Core;
 using Azure.Identity;
@@ -17,9 +18,26 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
 using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.Pkcs;
+using Org.BouncyCastle.Asn1.Sec;
 using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Cms;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Digests;
+using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Crypto.Operators;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Prng;
+using Org.BouncyCastle.Math;
+using Org.BouncyCastle.Pkcs;
+using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
+using AttributeTable = Org.BouncyCastle.Asn1.Cms.AttributeTable;
+using ContentInfo = System.Security.Cryptography.Pkcs.ContentInfo;
+using SignerInfo = System.Security.Cryptography.Pkcs.SignerInfo;
+using X509Certificate = Org.BouncyCastle.X509.X509Certificate;
 
 namespace DotNetCertAuthSample.Managers;
 
@@ -30,6 +48,8 @@ public class CertificateManager
     private GenerateArgModel? _generateArgModel;
     private RegisterArgModel? _registerArgModel;
     private CreateDCCertificate? _createDCCertArgModel;
+    private SCEPArgModel? _scepArgModel;
+    private HttpClient _httpClient = new();
 
     public int InitializeManager(RenewArgModel values)
     {
@@ -63,6 +83,17 @@ public class CertificateManager
         return 0;
     }
 
+    public int InitializeManager(SCEPArgModel values)
+    {
+        _logger = CreateLogger(values.AppInsightsKey);
+        if (!string.IsNullOrWhiteSpace(values.EKUsInputs))
+        {
+            values.EKUs = values.EKUsInputs.Split(',').ToList();
+        }
+        _scepArgModel = values;
+        return 0;
+    }
+
     public int ProcessError(IEnumerable<Error> errs)
     {
         return 1;
@@ -86,6 +117,10 @@ public class CertificateManager
         {
             return await CreateDCCertAsync(_createDCCertArgModel);
         }
+        if (_scepArgModel != null)
+        {
+            return await CreateSCEPCertificate(_scepArgModel);
+        }
         return -1;
     }
 
@@ -107,7 +142,7 @@ public class CertificateManager
             {
                 throw new ArgumentNullException(nameof(values.Domain));
             }
-            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            if (values.KeyLength != 2048 && values.KeyLength != 4096)
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
@@ -178,7 +213,7 @@ public class CertificateManager
                     throw new ArgumentNullException(nameof(values.Domain));
                 }
             }
-            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            if (values.KeyLength != 2048 && values.KeyLength != 4096)
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
@@ -268,7 +303,7 @@ public class CertificateManager
                 values.url,
                 CreateTokenCredential(values.AzureCLI)
             );
-            if(values.KeyLength != 2048 && values.KeyLength != 4096)
+            if (values.KeyLength != 2048 && values.KeyLength != 4096)
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
@@ -295,6 +330,346 @@ public class CertificateManager
             return 1;
         }
         return 0;
+    }
+
+    private async Task<int> CreateSCEPCertificate(SCEPArgModel values)
+    {
+        if (_logger == null)
+        {
+            throw new ArgumentNullException(nameof(_logger));
+        }
+        try
+        {
+            if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
+            {
+                values.SubjectAltNames = GetFQDN();
+                if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
+                {
+                    throw new ArgumentNullException(nameof(values.SubjectAltNames));
+                }
+            }
+            if (string.IsNullOrWhiteSpace(values.SubjectName))
+            {
+                values.SubjectName = GetComputerSubjectName();
+                if (string.IsNullOrWhiteSpace(values.SubjectName))
+                {
+                    throw new ArgumentNullException(
+                        nameof(values.SubjectName),
+                        "Please enter a valid Subject Name"
+                    );
+                }
+            }
+            if (values.EKUs == null || values.EKUs.Any() == false)
+            {
+                values.EKUs =
+                [
+                    EZCAConstants.ClientAuthenticationEKU,
+                    EZCAConstants.ServerAuthenticationEKU
+                ];
+            }
+            if (values.KeyLength != 2048 && values.KeyLength != 4096)
+            {
+                throw new ArgumentException("Key length must be 2048 or 4096");
+            }
+            if (string.IsNullOrWhiteSpace(values.url))
+            {
+                throw new ArgumentNullException(nameof(values.url));
+            }
+            //TIP: you can hardcode the password here or use a secure secret manager to avoid having the password in the Script
+            // values.SCEPPassword = "YourPassword";
+            if (string.IsNullOrWhiteSpace(values.SCEPPassword))
+            {
+                throw new ArgumentNullException(nameof(values.SCEPPassword));
+            }
+            X509Certificate2 caCert = await GetScepCA(values.url);
+            AsymmetricCipherKeyPair rsaKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
+            Pkcs10CertificationRequest request = CreateCSRForScep(
+                values,
+                values.SCEPPassword,
+                rsaKeyPair
+            );
+            return await RequestSCEPCertificateAsync(caCert, rsaKeyPair, request, values);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating SCEP certificate");
+            Console.WriteLine("Error creating certificate: " + ex.Message);
+            return 1;
+        }
+        return 0;
+    }
+
+    private async Task<int> RequestSCEPCertificateAsync(
+        X509Certificate2 caCertificate,
+        AsymmetricCipherKeyPair rsaKeyPair,
+        Pkcs10CertificationRequest request,
+        SCEPArgModel values
+    )
+    {
+        try
+        {
+            X509Certificate bouncyCastleCACert = DotNetUtilities.FromX509Certificate(caCertificate);
+            CmsEnvelopedDataGenerator envelopedDataGenerator = new();
+            envelopedDataGenerator.AddKeyTransRecipient(bouncyCastleCACert);
+            CmsProcessable req = new CmsProcessableByteArray(request.GetDerEncoded());
+            CmsEnvelopedData encryptedEnvelope = envelopedDataGenerator.Generate(
+                req,
+                CmsEnvelopedGenerator.Aes256Cbc
+            );
+            byte[] encryptedBytes = encryptedEnvelope.GetEncoded();
+            //create Signing Key
+            AsymmetricCipherKeyPair signingKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
+            X509Certificate2 cert = GenerateSelfSignedCertificate(signingKeyPair, "TempCert");
+            CmsSigner signer = new(cert);
+            var messageType = new AsnEncodedData(
+                "2.16.840.1.113733.1.9.2",
+                DerEncoding.EncodePrintableString("19")
+            );
+            signer.SignedAttributes.Add(messageType);
+            var transactionID = new Pkcs9AttributeObject(
+                "2.16.840.1.113733.1.9.7",
+                DerEncoding.EncodePrintableString(
+                    Convert.ToBase64String(SHA512.HashData(cert.GetPublicKey()))
+                )
+            );
+            signer.SignedAttributes.Add(transactionID);
+            SecureRandom random = new SecureRandom();
+            byte[] nonceBytes = new byte[16]; // Typically a 16-byte nonce
+            random.NextBytes(nonceBytes);
+            var nonce = new Pkcs9AttributeObject(
+                "2.16.840.1.113733.1.9.5",
+                DerEncoding.EncodeOctet(nonceBytes)
+            );
+            signer.SignedAttributes.Add(nonce);
+            ContentInfo signedContent = new(encryptedBytes);
+            SignedCms signedMessage = new(signedContent);
+            signedMessage.ComputeSignature(signer);
+            byte[] signedBytes = signedMessage.Encode();
+            ByteArrayContent content = new ByteArrayContent(signedBytes);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                "application/x-pki-message"
+            );
+            HttpResponseMessage response = await _httpClient.PostAsync(values.url, content);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception(
+                    $"Failed to request SCEP certificate: {response.StatusCode} "
+                        + await response.Content.ReadAsStringAsync()
+                );
+            }
+            byte[] responseBytes = await response.Content.ReadAsByteArrayAsync();
+            return DecodeAndInstallSCEPCertificate(
+                responseBytes,
+                rsaKeyPair,
+                caCertificate,
+                nonceBytes,
+                cert,
+                values.LocalCertStore
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error Requesting SCEP certificate");
+            Console.WriteLine("Error Requesting SCEP certificate: " + ex.Message);
+            return 1;
+        }
+    }
+
+    private int DecodeAndInstallSCEPCertificate(
+        byte[] responseBytes,
+        AsymmetricCipherKeyPair rsaKeyPair,
+        X509Certificate2 caCertificate,
+        byte[] nonce,
+        X509Certificate2 signingCert,
+        bool localStore
+    )
+    {
+        var signedResponse = new SignedCms();
+        signedResponse.Decode(responseBytes);
+        X509Certificate2Collection caCerts = [caCertificate];
+        signedResponse.CheckSignature(caCerts, true);
+        var attributes = signedResponse
+            .SignerInfos.Cast<SignerInfo>()
+            .SelectMany(si => si.SignedAttributes.Cast<CryptographicAttributeObject>());
+        var recipientNonce = attributes.FirstOrDefault(a =>
+            a.Oid.Value == "2.16.840.1.113733.1.9.6"
+        );
+        if (recipientNonce == null)
+        {
+            throw new Exception("Recipient nonce not found in response");
+        }
+        if (!nonce.SequenceEqual(recipientNonce.Values[0].RawData[2..]))
+        {
+            throw new Exception("Recipient nonce does not match");
+        }
+        var certBytes = signedResponse.ContentInfo.Content;
+        var cmsResponse = new EnvelopedCms();
+        cmsResponse.Decode(signedResponse.ContentInfo.Content);
+        cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
+        X509Certificate2Collection certCollection = new X509Certificate2Collection();
+        certCollection.Import(cmsResponse.ContentInfo.Content);
+        X509Certificate2 cert = certCollection.Last();
+        RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
+        cert = cert.CopyWithPrivateKey(rsaPrivateKey);
+        WindowsCertStoreService.InstallFullCertificate(cert, localStore);
+        return 0;
+    }
+
+    private static X509Certificate2 GenerateSelfSignedCertificate(
+        AsymmetricCipherKeyPair keyPair,
+        string subjectName,
+        int validDays = 2
+    )
+    {
+        // Create the certificate generator
+        X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
+
+        // Set certificate subject and issuer (self-signed so issuer is the same as the subject)
+        X509Name issuerName = new X509Name($"CN={subjectName}");
+        certGen.SetIssuerDN(issuerName);
+        certGen.SetSubjectDN(issuerName);
+
+        // Set the certificate's serial number
+        BigInteger serialNumber = BigInteger.ProbablePrime(120, new SecureRandom());
+        certGen.SetSerialNumber(serialNumber);
+
+        // Set the certificate's validity period
+        DateTime notBefore = DateTime.UtcNow.Date;
+        DateTime notAfter = notBefore.AddDays(validDays);
+        certGen.SetNotBefore(notBefore);
+        certGen.SetNotAfter(notAfter);
+
+        // Set the public key for the certificate
+        certGen.SetPublicKey(keyPair.Public);
+
+        // Optionally add extensions (like Basic Constraints, Key Usage, etc.)
+        certGen.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true)); // Cert is allowed to act as a CA
+
+        // Sign the certificate with the private key
+        ISignatureFactory signatureFactory = new Asn1SignatureFactory(
+            "SHA256WITHRSA",
+            keyPair.Private
+        );
+        X509Certificate bouncyCastleCert = certGen.Generate(signatureFactory);
+        X509Certificate2 cert = new X509Certificate2(bouncyCastleCert.GetEncoded());
+        RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)keyPair.Private);
+        cert = cert.CopyWithPrivateKey(rsaPrivateKey);
+        return cert;
+    }
+
+    private Pkcs10CertificationRequest CreateCSRForScep(
+        SCEPArgModel values,
+        string challengePassword,
+        AsymmetricCipherKeyPair rsaKeyPair
+    )
+    {
+        AttributePkcs scepPassword = new AttributePkcs(
+            PkcsObjectIdentifiers.Pkcs9AtChallengePassword,
+            new DerSet(new DerPrintableString(challengePassword))
+        );
+        X509ExtensionsGenerator extensions = new X509ExtensionsGenerator();
+        if (!string.IsNullOrWhiteSpace(values.SubjectAltNames))
+        {
+            GeneralNames subjectAlternateNames = new GeneralNames(
+                values
+                    .SubjectAltNames.Split(',')
+                    .Select(dnsName => new GeneralName(GeneralName.DnsName, dnsName))
+                    .ToArray()
+            );
+            extensions.AddExtension(
+                X509Extensions.SubjectAlternativeName,
+                false,
+                subjectAlternateNames
+            );
+        }
+        AttributePkcs extensionRequest = new AttributePkcs(
+            PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
+            new DerSet(extensions.Generate())
+        );
+        Asn1Encodable ekus = new ExtendedKeyUsage(
+            values.EKUs.Select(oid => new DerObjectIdentifier(oid)).ToArray()
+        );
+        extensions.AddExtension(X509Extensions.ExtendedKeyUsage, false, ekus);
+        //key usage
+        extensions.AddExtension(
+            X509Extensions.KeyUsage,
+            true,
+            (
+                new KeyUsage(
+                    KeyUsage.KeyEncipherment
+                        | KeyUsage.DigitalSignature
+                        | KeyUsage.KeyCertSign
+                        | KeyUsage.CrlSign
+                )
+            ).ToAsn1Object()
+        );
+        Pkcs10CertificationRequest request = new Pkcs10CertificationRequest(
+            "SHA256WITHRSA",
+            new X509Name(values.SubjectName),
+            rsaKeyPair.Public,
+            new DerSet(extensionRequest, scepPassword),
+            rsaKeyPair.Private
+        );
+        return request;
+    }
+
+    private static AsymmetricCipherKeyPair CreateKeyPair(string keyAlgo)
+    {
+        var randomGenerator = new CryptoApiRandomGenerator();
+        var random = new SecureRandom(randomGenerator);
+        if (keyAlgo.Contains("RSA", StringComparison.OrdinalIgnoreCase))
+        {
+            int strength = Int32.Parse(keyAlgo.Split(" ")[1]);
+            var keyGenerationParameters = new KeyGenerationParameters(random, strength);
+            var keyPairGenerator = new RsaKeyPairGenerator();
+            keyPairGenerator.Init(keyGenerationParameters);
+            return keyPairGenerator.GenerateKeyPair();
+        }
+        if (keyAlgo.Contains("ECDSA", StringComparison.OrdinalIgnoreCase))
+        {
+            var ecKeyPairGenerator = new ECKeyPairGenerator();
+            ECKeyGenerationParameters ecKeyGenParams;
+            if (keyAlgo.Contains("256"))
+            {
+                ecKeyGenParams = new(SecObjectIdentifiers.SecP256r1, new SecureRandom());
+            }
+            else if (keyAlgo.Contains("384"))
+            {
+                ecKeyGenParams = new(SecObjectIdentifiers.SecP384r1, new SecureRandom());
+            }
+            else
+            {
+                throw new NotImplementedException($"Algorithm {keyAlgo} not supported");
+            }
+            ecKeyPairGenerator.Init(ecKeyGenParams);
+            return ecKeyPairGenerator.GenerateKeyPair();
+        }
+        throw new NotImplementedException($"Algorithm {keyAlgo} not supported");
+    }
+
+    private async Task<X509Certificate2> GetScepCA(string scepURL)
+    {
+        HttpResponseMessage caResponse = await _httpClient.GetAsync(
+            string.Concat(scepURL, "?operation=GetCACert&message=ca")
+        );
+        if (caResponse.IsSuccessStatusCode)
+        {
+            byte[] caCertData = await caResponse.Content.ReadAsByteArrayAsync();
+            X509Certificate2 caCert = new(caCertData);
+            // Validate the chain to ensure we trust the CA
+            X509Chain chain = new();
+            if (chain.Build(caCert))
+            {
+                return caCert;
+            }
+            throw new Exception(
+                "Error building chain for SCEP CA certificate: "
+                    + chain.ChainStatus[0].StatusInformation
+            );
+        }
+        throw new Exception(
+            "Error getting SCEP CA certificate: " + await caResponse.Content.ReadAsStringAsync()
+        );
     }
 
     private string GetComputerSubjectName()
@@ -450,7 +825,7 @@ public class CertificateManager
                 "Error certificate validity has to be greater than 0"
             );
         }
-        if(keyLength != 2048 && keyLength != 4096)
+        if (keyLength != 2048 && keyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
         }

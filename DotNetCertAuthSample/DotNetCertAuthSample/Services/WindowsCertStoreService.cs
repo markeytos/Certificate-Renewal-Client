@@ -43,8 +43,11 @@ namespace DotNetCertAuthSample.Services
                         .Find(X509FindType.FindByIssuerName, issuerName, true)
                         .FirstOrDefault();
                 }
-                cert ??= certs.OrderByDescending(x => x.NotAfter).FirstOrDefault(i => 
-                    i.SubjectName.Name == $"CN={subjectName}") ?? certs.OrderByDescending(x => x.NotAfter).First();
+                cert ??=
+                    certs
+                        .OrderByDescending(x => x.NotAfter)
+                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                    ?? certs.OrderByDescending(x => x.NotAfter).First();
             }
             else
             {
@@ -71,8 +74,11 @@ namespace DotNetCertAuthSample.Services
                 }
                 else if (matchingCertificates.Count > 1)
                 {
-                    cert = matchingCertificates.OrderByDescending(x => x.NotAfter).FirstOrDefault(i => 
-                        i.SubjectName.Name == $"CN={subjectName}") ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
+                    cert =
+                        matchingCertificates
+                            .OrderByDescending(x => x.NotAfter)
+                            .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                        ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
                 }
             }
             if (cert == null)
@@ -113,9 +119,11 @@ namespace DotNetCertAuthSample.Services
         )
         {
             CX509CertificateRequestPkcs10 certRequest = new();
-            certRequest.Initialize(localStore
-                ? X509CertificateEnrollmentContext.ContextMachine
-                : X509CertificateEnrollmentContext.ContextUser);
+            certRequest.Initialize(
+                localStore
+                    ? X509CertificateEnrollmentContext.ContextMachine
+                    : X509CertificateEnrollmentContext.ContextUser
+            );
             certRequest.PrivateKey.ExportPolicy =
                 X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
             certRequest.PrivateKey.Length = keylength;
@@ -151,6 +159,7 @@ namespace DotNetCertAuthSample.Services
                 x509ExtensionEnhancedKeyUsage.InitializeEncode(objectIds);
                 certRequest.X509Extensions.Add((CX509Extension)x509ExtensionEnhancedKeyUsage);
             }
+
             certRequest.Encode();
             return certRequest;
         }
@@ -169,6 +178,15 @@ namespace DotNetCertAuthSample.Services
                 EncodingType.XCN_CRYPT_STRING_BASE64HEADER,
                 null
             );
+        }
+
+        public static void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
+        {
+            X509Store store =
+                new(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            store.Add(certificate);
+            store.Close();
         }
 
         private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
