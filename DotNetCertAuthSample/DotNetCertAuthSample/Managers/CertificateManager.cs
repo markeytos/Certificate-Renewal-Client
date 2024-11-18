@@ -433,7 +433,7 @@ public class CertificateManager
                 )
             );
             signer.SignedAttributes.Add(transactionID);
-            SecureRandom random = new SecureRandom();
+            SecureRandom random = new ();
             byte[] nonceBytes = new byte[16]; // Typically a 16-byte nonce
             random.NextBytes(nonceBytes);
             var nonce = new Pkcs9AttributeObject(
@@ -445,7 +445,7 @@ public class CertificateManager
             SignedCms signedMessage = new(signedContent);
             signedMessage.ComputeSignature(signer);
             byte[] signedBytes = signedMessage.Encode();
-            ByteArrayContent content = new ByteArrayContent(signedBytes);
+            ByteArrayContent content = new (signedBytes);
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
                 "application/x-pki-message"
             );
@@ -598,8 +598,6 @@ public class CertificateManager
                 new KeyUsage(
                     KeyUsage.KeyEncipherment
                         | KeyUsage.DigitalSignature
-                        | KeyUsage.KeyCertSign
-                        | KeyUsage.CrlSign
                 )
             ).ToAsn1Object()
         );
