@@ -433,7 +433,7 @@ public class CertificateManager
                 )
             );
             signer.SignedAttributes.Add(transactionID);
-            SecureRandom random = new ();
+            SecureRandom random = new();
             byte[] nonceBytes = new byte[16]; // Typically a 16-byte nonce
             random.NextBytes(nonceBytes);
             var nonce = new Pkcs9AttributeObject(
@@ -445,7 +445,7 @@ public class CertificateManager
             SignedCms signedMessage = new(signedContent);
             signedMessage.ComputeSignature(signer);
             byte[] signedBytes = signedMessage.Encode();
-            ByteArrayContent content = new (signedBytes);
+            ByteArrayContent content = new(signedBytes);
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
                 "application/x-pki-message"
             );
@@ -508,7 +508,7 @@ public class CertificateManager
         cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
         X509Certificate2Collection certCollection = new X509Certificate2Collection();
         certCollection.Import(cmsResponse.ContentInfo.Content);
-        X509Certificate2 cert = certCollection.Last();
+        X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).Last();
         RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         WindowsCertStoreService.InstallFullCertificate(cert, localStore);
@@ -594,12 +594,7 @@ public class CertificateManager
         extensions.AddExtension(
             X509Extensions.KeyUsage,
             true,
-            (
-                new KeyUsage(
-                    KeyUsage.KeyEncipherment
-                        | KeyUsage.DigitalSignature
-                )
-            ).ToAsn1Object()
+            (new KeyUsage(KeyUsage.KeyEncipherment | KeyUsage.DigitalSignature)).ToAsn1Object()
         );
         Pkcs10CertificationRequest request = new Pkcs10CertificationRequest(
             "SHA256WITHRSA",
