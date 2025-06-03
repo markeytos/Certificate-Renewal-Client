@@ -582,10 +582,6 @@ public class CertificateManager
                 subjectAlternateNames
             );
         }
-        AttributePkcs extensionRequest = new AttributePkcs(
-            PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
-            new DerSet(extensions.Generate())
-        );
         Asn1Encodable ekus = new ExtendedKeyUsage(
             values.EKUs.Select(oid => new DerObjectIdentifier(oid)).ToArray()
         );
@@ -595,6 +591,10 @@ public class CertificateManager
             X509Extensions.KeyUsage,
             true,
             (new KeyUsage(KeyUsage.KeyEncipherment | KeyUsage.DigitalSignature)).ToAsn1Object()
+        );
+        AttributePkcs extensionRequest = new AttributePkcs(
+            PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
+            new DerSet(extensions.Generate())
         );
         Pkcs10CertificationRequest request = new Pkcs10CertificationRequest(
             "SHA256WITHRSA",
