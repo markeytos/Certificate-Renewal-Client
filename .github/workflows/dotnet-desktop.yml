@@ -1,0 +1,38 @@
+name: Build Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: EZCA Client Version
+        required: true
+        default: '1.0.0'
+  
+  push:
+    branches: [ "main" ]
+env:
+  GH_TOKEN: ${{ github.token }}
+jobs:
+
+  build:
+    runs-on: windows-latest  
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - run: gh release create ezssh-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}"
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Authenticate with Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.EZCMS_CLIENT_DEPLOYER  }}
+      - name: Install SignTool
+        run: dotnet tool install --global  AzureSignTool
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      - name: Run Powershell Script 
+        run: .\build.ps1
+      - name: Upload Artifacts
+        run: gh release upload ezca-client-v${{ inputs.version }} .\DotNetCertAuthSample\bin\Release\net8.0-windows\win-x64\publish\*.exe
