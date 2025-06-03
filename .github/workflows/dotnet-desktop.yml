@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - run: gh release create ezssh-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}"
+      - run: gh release create ezca-client-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}"
       - name: Set up .NET Core
         uses: actions/setup-dotnet@v4
         with:
