@@ -1,4 +1,8 @@
-$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin" 
-$env:Path += ";C:\Program Files (x86)\Windows Kits\10\App Certification Kit"
+param (
+    [string] $signingCertName = "globalsign",
+    [string] $signingAKV = "https://codesigningkeytos.vault.azure.net/"
+)
+
 msbuild /restore /t:publish  /p:Configuration=Release /p:SelfContained=True  /p:RuntimeIdentifier=win-x64 /p:PublishSingleFile=true
-SignTool sign /fd SHA256 /a /t http://timestamp.digicert.com  /n "Keytos LLC" .\DotNetCertAuthSample\bin\Release\net8.0-windows\win-x64\publish\*.exe
+$akvToken = (az account get-access-token  --resource https://vault.azure.net --query "accessToken").Replace('"','')
+azuresigntool sign --azure-key-vault-url $signingAKV -kvc $signingCertName --azure-key-vault-accesstoken $akvToken -tr http://timestamp.digicert.com .\DotNetCertAuthSample\bin\Release\net8.0-windows\win-x64\publish\*.exe

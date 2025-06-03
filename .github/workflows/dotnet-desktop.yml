@@ -27,7 +27,7 @@ jobs:
       - name: Authenticate with Azure
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.EZCMS_CLIENT_DEPLOYER  }}
+          creds: ${{ secrets.EZCA_CLIENT_DEPLOYER  }}
       - name: Install SignTool
         run: dotnet tool install --global  AzureSignTool
       - name: Add msbuild to PATH
