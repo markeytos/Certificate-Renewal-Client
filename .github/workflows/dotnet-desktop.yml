@@ -33,4 +33,4 @@ jobs:
       - name: Run Powershell Script 
         run: .\DotNetCertAuthSample\build.ps1
       - name: Upload Artifacts
-        run: gh release upload ezca-client-v${{ inputs.version }} .\DotNetCertAuthSample\bin\Release\net8.0-windows\win-x64\publish\*.exe
+        run: gh release upload ezca-client-v${{ inputs.version }} .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net8.0-windows\win-x64\publish\EZCACertManager.exe
