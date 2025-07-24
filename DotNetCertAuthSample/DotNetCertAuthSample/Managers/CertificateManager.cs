@@ -366,7 +366,7 @@ public class CertificateManager
                     );
                 }
             }
-            if (values.EKUs == null || values.EKUs.Count == 0)
+            if (values.EKUs is null or { Count: 0 })
             {
                 values.EKUs =
                 [
