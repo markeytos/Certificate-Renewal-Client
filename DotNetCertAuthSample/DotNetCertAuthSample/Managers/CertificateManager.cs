@@ -13,6 +13,8 @@ using DotNetCertAuthSample.Services;
 using EZCAClient.Managers;
 using EZCAClient.Models;
 using EZCAClient.Services;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Management.Infrastructure;
@@ -21,10 +23,8 @@ using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.Sec;
 using Org.BouncyCastle.Asn1.X509;
-using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Cms;
 using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Operators;
 using Org.BouncyCastle.Crypto.Parameters;
@@ -34,7 +34,6 @@ using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
-using AttributeTable = Org.BouncyCastle.Asn1.Cms.AttributeTable;
 using ContentInfo = System.Security.Cryptography.Pkcs.ContentInfo;
 using SignerInfo = System.Security.Cryptography.Pkcs.SignerInfo;
 using X509Certificate = Org.BouncyCastle.X509.X509Certificate;
@@ -50,6 +49,7 @@ public class CertificateManager
     private CreateDCCertificate? _createDCCertArgModel;
     private SCEPArgModel? _scepArgModel;
     private HttpClient _httpClient = new();
+    private TelemetryClient? _telemetryClient;
 
     public int InitializeManager(RenewArgModel values)
     {
@@ -101,27 +101,33 @@ public class CertificateManager
 
     public async Task<int> CallCertActionAsync()
     {
+        int response = -1;
         if (_renewArgModel != null)
         {
-            return await RenewAsync(_renewArgModel);
+            response = await RenewAsync(_renewArgModel);
         }
-        if (_generateArgModel != null)
+        else if (_generateArgModel != null)
         {
-            return await CreateCertAsync(_generateArgModel);
+            response = await CreateCertAsync(_generateArgModel);
         }
-        if (_registerArgModel != null)
+        else if (_registerArgModel != null)
         {
-            return await RegisterAndCreateCertAsync(_registerArgModel);
+            response = await RegisterAndCreateCertAsync(_registerArgModel);
         }
-        if (_createDCCertArgModel != null)
+        else if (_createDCCertArgModel != null)
         {
-            return await CreateDCCertAsync(_createDCCertArgModel);
+            response = await CreateDCCertAsync(_createDCCertArgModel);
         }
-        if (_scepArgModel != null)
+        else if (_scepArgModel != null)
         {
-            return await CreateSCEPCertificate(_scepArgModel);
+            response = await CreateSCEPCertificate(_scepArgModel);
         }
-        return -1;
+        if (_telemetryClient != null)
+        {
+            await _telemetryClient.FlushAsync(CancellationToken.None);
+            Thread.Sleep(5000);
+        }
+        return response;
     }
 
     private async Task<int> RenewAsync(RenewArgModel values)
@@ -132,6 +138,7 @@ public class CertificateManager
         }
         try
         {
+            _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
             if (values is { RDPCert: true, LocalCertStore: false })
             {
                 throw new ArgumentException(
@@ -359,7 +366,7 @@ public class CertificateManager
                     );
                 }
             }
-            if (values.EKUs == null || values.EKUs.Any() == false)
+            if (values.EKUs == null || values.EKUs.Count == 0)
             {
                 values.EKUs =
                 [
@@ -381,6 +388,11 @@ public class CertificateManager
             {
                 throw new ArgumentNullException(nameof(values.SCEPPassword));
             }
+            _logger.LogInformation(
+                "Creating SCEP certificate for {SubjectName}",
+                values.SubjectName
+            );
+            Console.WriteLine("Creating SCEP certificate for " + values.SubjectName);
             X509Certificate2 caCert = await GetScepCA(values.url);
             AsymmetricCipherKeyPair rsaKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
             Pkcs10CertificationRequest request = CreateCSRForScep(
@@ -936,22 +948,31 @@ public class CertificateManager
         return new DefaultAzureCredential(includeInteractiveCredentials: true);
     }
 
-    private static ILogger CreateLogger(string? appInsightsKey)
+    private ILogger CreateLogger(string? appInsightsKey)
     {
         IServiceCollection services = new ServiceCollection();
         services.AddLogging(builder =>
         {
+            builder.SetMinimumLevel(LogLevel.Information);
             if (!string.IsNullOrWhiteSpace(appInsightsKey))
             {
                 builder.AddApplicationInsights(
                     configureTelemetryConfiguration: (config) =>
                         config.ConnectionString = appInsightsKey,
-                    configureApplicationInsightsLoggerOptions: (options) => { }
+                    configureApplicationInsightsLoggerOptions: (_) => { }
                 );
             }
             builder.AddEventLog();
         });
+        if (!string.IsNullOrWhiteSpace(appInsightsKey))
+        {
+            services.AddSingleton<TelemetryClient>();
+        }
         IServiceProvider serviceProvider = services.BuildServiceProvider();
+        if (!string.IsNullOrWhiteSpace(appInsightsKey))
+        {
+            _telemetryClient = serviceProvider.GetRequiredService<TelemetryClient>();
+        }
         return serviceProvider.GetRequiredService<ILogger<Program>>();
     }
 
