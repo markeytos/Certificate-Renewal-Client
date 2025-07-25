@@ -27,7 +27,7 @@
     <PackageReference Include="jose-jwt" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
-	<PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.22.0" />
+	<PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.23.0" />
 	<PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="8.0.0" />
 	<PackageReference Include="Microsoft.Management.Infrastructure" Version="3.0.0" />
 	<PackageReference Include="System.DirectoryServices.AccountManagement" Version="8.0.0" />
