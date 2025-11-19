@@ -92,7 +92,7 @@ public class CreateDCCertificate
     [Option(
         "SubjectAltNames",
         Required = false,
-        HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.contoso.com,server2.contoso.com"
+        HelpText = "A comma-separate list of additional Subject Alternate Names to be added to this certificate, in addition to the Domain name. When not specified, only the Domain name is added as a SAN. For example: server1.contoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
 }
