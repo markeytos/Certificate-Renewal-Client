@@ -95,6 +95,9 @@ The following options are available for this command:
   -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
                         Microsoft Enhanced Cryptographic Provider v1.0)
 
+  --SubjectAltNames     Subject Alternate Names for this certificate for example (comma separate multiple):
+                        server1.contoso.com,server2.contoso.com
+
   --help                Display this help screen.
 
   --version             Display version information.

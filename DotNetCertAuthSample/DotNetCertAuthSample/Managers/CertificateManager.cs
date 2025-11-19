@@ -854,14 +854,10 @@ public class CertificateManager
         // Add additional SANs if provided, with deduplication
         if (additionalSubjectAltNames?.Count > 0)
         {
-            foreach (var san in additionalSubjectAltNames)
-            {
-                // Add only if not already in the list (case-insensitive comparison)
-                if (!subjectAltNames.Contains(san, StringComparer.OrdinalIgnoreCase))
-                {
-                    subjectAltNames.Add(san);
-                }
-            }
+            var newSans = additionalSubjectAltNames
+                .Where(san => !subjectAltNames.Contains(san, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            subjectAltNames.AddRange(newSans);
         }
         
         if (

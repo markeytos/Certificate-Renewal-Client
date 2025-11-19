@@ -92,7 +92,7 @@ public class CreateDCCertificate
     [Option(
         "SubjectAltNames",
         Required = false,
-        HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
+        HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.contoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
 }
