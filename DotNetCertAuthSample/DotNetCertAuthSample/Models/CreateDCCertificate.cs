@@ -88,4 +88,11 @@ public class CreateDCCertificate
         HelpText = "Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)"
     )]
     public string KeyProvider { get; set; } = "Microsoft Enhanced Cryptographic Provider v1.0";
+
+    [Option(
+        "SubjectAltNames",
+        Required = false,
+        HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
+    )]
+    public string? SubjectAltNames { get; set; }
 }

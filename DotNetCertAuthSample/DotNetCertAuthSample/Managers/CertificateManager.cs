@@ -314,6 +314,18 @@ public class CertificateManager
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
+            
+            // Process additional SubjectAltNames if provided
+            List<string>? additionalSANs = null;
+            if (!string.IsNullOrWhiteSpace(values.SubjectAltNames))
+            {
+                additionalSANs = values
+                    .SubjectAltNames.Split(',')
+                    .Select(san => san.Trim())
+                    .Where(san => !string.IsNullOrWhiteSpace(san))
+                    .ToList();
+            }
+            
             AvailableCAModel selectedCA =
                 new() { CAID = values.caID, TemplateID = values.TemplateID, };
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
@@ -327,7 +339,8 @@ public class CertificateManager
                 values.EKUs,
                 values.KeyLength,
                 values.DCGUID,
-                values.KeyProvider
+                values.KeyProvider,
+                additionalSANs
             );
         }
         catch (Exception ex)
@@ -816,7 +829,8 @@ public class CertificateManager
         List<string> ekus,
         int keyLength,
         string dcGUID = "",
-        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
+        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+        List<string>? additionalSubjectAltNames = null
     )
     {
         if (_logger == null)
@@ -834,7 +848,22 @@ public class CertificateManager
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
         }
+        // Start with domain as first SAN
         List<string> subjectAltNames = [domain];
+        
+        // Add additional SANs if provided, with deduplication
+        if (additionalSubjectAltNames != null && additionalSubjectAltNames.Any())
+        {
+            foreach (var san in additionalSubjectAltNames)
+            {
+                // Add only if not already in the list (case-insensitive comparison)
+                if (!subjectAltNames.Contains(san, StringComparer.OrdinalIgnoreCase))
+                {
+                    subjectAltNames.Add(san);
+                }
+            }
+        }
+        
         if (
             !subjectName.StartsWith("CN=", StringComparison.InvariantCultureIgnoreCase)
             && !subjectName.StartsWith("CN =", StringComparison.InvariantCultureIgnoreCase)
