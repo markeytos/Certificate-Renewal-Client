@@ -88,4 +88,11 @@ public class CreateDCCertificate
         HelpText = "Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)"
     )]
     public string KeyProvider { get; set; } = "Microsoft Enhanced Cryptographic Provider v1.0";
+
+    [Option(
+        "SubjectAltNames",
+        Required = false,
+        HelpText = "A comma-separate list of additional Subject Alternate Names to be added to this certificate, in addition to the Domain name. When not specified, only the Domain name is added as a SAN. For example: server1.contoso.com,server2.contoso.com"
+    )]
+    public string? SubjectAltNames { get; set; }
 }
