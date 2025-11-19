@@ -852,7 +852,7 @@ public class CertificateManager
         List<string> subjectAltNames = [domain];
         
         // Add additional SANs if provided, with deduplication
-        if (additionalSubjectAltNames != null && additionalSubjectAltNames.Any())
+        if (additionalSubjectAltNames?.Count > 0)
         {
             foreach (var san in additionalSubjectAltNames)
             {
