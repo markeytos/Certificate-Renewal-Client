@@ -1,12 +1,13 @@
-﻿using System.Security.Cryptography;
+﻿#if WINDOWS
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
 
 namespace DotNetCertAuthSample.Services
 {
-    public static class WindowsCertStoreService
+    public class WindowsCertStoreService : ICertStoreService
     {
-        public static X509Certificate2 GetCertFromWinStoreBySubject(
+        public X509Certificate2 GetCertFromStoreBySubject(
             string subjectName,
             bool localStore,
             string issuerName = "",
@@ -91,7 +92,7 @@ namespace DotNetCertAuthSample.Services
             return cert;
         }
 
-        public static X509Certificate2? GetCertFromWinStoreBythumbprint(string thumbprint)
+        public X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint)
         {
             //not recommended since it breaks with auto rotation
             X509Store store = new(StoreLocation.CurrentUser);
@@ -109,7 +110,7 @@ namespace DotNetCertAuthSample.Services
             return cert;
         }
 
-        public static CX509CertificateRequestPkcs10 CreateCSR(
+        public CsrData CreateCSR(
             string subjectName,
             List<string> sans,
             int keylength,
@@ -161,14 +162,21 @@ namespace DotNetCertAuthSample.Services
             }
 
             certRequest.Encode();
-            return certRequest;
+            
+            return new CsrData
+            {
+                CsrPem = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER],
+                PrivateKeyContext = certRequest
+            };
         }
 
-        public static void InstallCertificate(
-            string cert,
-            CX509CertificateRequestPkcs10 certRequest
-        )
+        public void InstallCertificate(string cert, CsrData csrData)
         {
+            if (csrData.PrivateKeyContext is not CX509CertificateRequestPkcs10 certRequest)
+            {
+                throw new ArgumentException("Invalid CSR context for Windows certificate installation");
+            }
+            
             CX509Enrollment objEnroll = new();
             objEnroll.InitializeFromRequest(certRequest);
             objEnroll.CreateRequest(EncodingType.XCN_CRYPT_STRING_BASE64);
@@ -180,7 +188,7 @@ namespace DotNetCertAuthSample.Services
             );
         }
 
-        public static void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
+        public void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
         {
             X509Store store =
                 new(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
@@ -246,3 +254,4 @@ namespace DotNetCertAuthSample.Services
         }
     }
 }
+#endif
