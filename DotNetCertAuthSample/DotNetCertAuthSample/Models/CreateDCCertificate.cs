@@ -63,7 +63,6 @@ public class CreateDCCertificate
     [Option(
         "EKUs",
         Required = false,
-        Default = "1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1,1.3.6.1.4.1.311.20.2.2,1.3.6.1.5.2.3.5",
         HelpText = "EKUs requested for the certificate"
     )]
     public string? EKUsInputs { get; set; }

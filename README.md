@@ -173,8 +173,9 @@ EZCACertManager.exe createDC --help
 
   -e, --EZCAInstance    (Default: https://portal.ezca.io/) EZCA instance url
 
-  --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1,1.3.6.1.4.1.311.20.2.2,1.3.6.1.5.2.3.5) EKUs
-                        requested for the certificate
+  --EKUs                EKUs requested for the certificate (if not specified, defaults to Client Authentication,
+                        Server Authentication, Smart Card Logon, and Kerberos Authentication: 
+                        1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1,1.3.6.1.4.1.311.20.2.2,1.3.6.1.5.2.3.5)
 
   --AzureCLI            (Default: false) Use Azure CLI as authentication method
 
@@ -210,7 +211,8 @@ EZCACertManager.exe SCEPCertificate --help
    --LocalStore          (Default: true) If the certificate should be stored in the computers Local Store. If false
                         certificate will be stored in the user store
 
-  --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1) EKUs requested for the certificate
+  --EKUs                EKUs requested for the certificate (if not specified, defaults to Client Authentication 
+                        and Server Authentication: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1)
 
   -k, --KeyLength       (Default: 4096) Certificate Key Length
 

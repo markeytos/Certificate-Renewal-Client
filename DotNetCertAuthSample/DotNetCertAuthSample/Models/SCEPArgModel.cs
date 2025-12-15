@@ -20,7 +20,6 @@ public class SCEPArgModel
     [Option(
         "EKUs",
         Required = false,
-        Default = "1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1",
         HelpText = "EKUs requested for the certificate"
     )]
     public string? EKUsInputs { get; set; }
