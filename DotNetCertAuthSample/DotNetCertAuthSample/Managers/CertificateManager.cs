@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -933,9 +934,18 @@ public class CertificateManager
                     configureApplicationInsightsLoggerOptions: (_) => { }
                 );
             }
+            // EventLog is Windows-only
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
 #pragma warning disable CA1416
-            builder.AddEventLog();
+                builder.AddEventLog();
 #pragma warning restore CA1416
+            }
+            else
+            {
+                // Add console logging for non-Windows platforms
+                builder.AddConsole();
+            }
         });
         if (!string.IsNullOrWhiteSpace(appInsightsKey))
         {
