@@ -159,6 +159,10 @@ public class CertificateManager
                 values.issuer,
                 values.template
             );
+            
+            // Extract key usages from the existing certificate
+            CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
+            
             CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
@@ -168,7 +172,8 @@ public class CertificateManager
                 values.KeyLength,
                 values.LocalCertStore,
                 new(),
-                values.KeyProvider
+                values.KeyProvider,
+                keyUsages
             );
             string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
             _logger.LogInformation($"Renewing certificate");
