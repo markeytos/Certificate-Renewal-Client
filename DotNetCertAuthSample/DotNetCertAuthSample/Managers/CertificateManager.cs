@@ -1,12 +1,10 @@
-﻿using System.DirectoryServices.AccountManagement;
-using System.Globalization;
-using System.Net;
+﻿using System.Net;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using Azure.Core;
 using Azure.Identity;
-using CERTENROLLLib;
 using CommandLine;
 using DotNetCertAuthSample.Models;
 using DotNetCertAuthSample.Services;
@@ -17,8 +15,6 @@ using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Management.Infrastructure;
-using Microsoft.Management.Infrastructure.Options;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.Sec;
@@ -50,6 +46,14 @@ public class CertificateManager
     private SCEPArgModel? _scepArgModel;
     private HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
+    private readonly ICertStoreService _certStoreService;
+    private readonly ISystemInfoService _systemInfoService;
+
+    public CertificateManager(ICertStoreService certStoreService, ISystemInfoService systemInfoService)
+    {
+        _certStoreService = certStoreService;
+        _systemInfoService = systemInfoService;
+    }
 
     public int InitializeManager(RenewArgModel values)
     {
@@ -153,13 +157,13 @@ public class CertificateManager
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
-            X509Certificate2 cert = WindowsCertStoreService.GetCertFromWinStoreBySubject(
+            X509Certificate2 cert = _certStoreService.GetCertFromStoreBySubject(
                 values.Domain.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
                 values.template
             );
-            CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
+            CsrData csrData = _certStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -170,12 +174,12 @@ public class CertificateManager
                 new(),
                 values.KeyProvider
             );
-            string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
+            string csr = csrData.CsrPem;
             _logger.LogInformation($"Renewing certificate");
             Console.WriteLine($"Renewing certificate");
             IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
-            WindowsCertStoreService.InstallCertificate(createdCert, certRequest);
+            _certStoreService.InstallCertificate(createdCert, csrData);
             _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
             Console.WriteLine($"certificate {values.Domain} was renewed successfully");
             if (values.RDPCert)
@@ -421,7 +425,6 @@ public class CertificateManager
             Console.WriteLine("Error creating certificate: " + ex.Message);
             return 1;
         }
-        return 0;
     }
 
     private async Task<int> RequestSCEPCertificateAsync(
@@ -534,9 +537,11 @@ public class CertificateManager
         X509Certificate2Collection certCollection = new X509Certificate2Collection();
         certCollection.Import(cmsResponse.ContentInfo.Content);
         X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).Last();
+#pragma warning disable CA1416
         RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
+#pragma warning restore CA1416
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
-        WindowsCertStoreService.InstallFullCertificate(cert, localStore);
+        _certStoreService.InstallFullCertificate(cert, localStore);
         return 0;
     }
 
@@ -577,7 +582,9 @@ public class CertificateManager
         );
         X509Certificate bouncyCastleCert = certGen.Generate(signatureFactory);
         X509Certificate2 cert = new X509Certificate2(bouncyCastleCert.GetEncoded());
+#pragma warning disable CA1416
         RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)keyPair.Private);
+#pragma warning restore CA1416
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         return cert;
     }
@@ -692,50 +699,17 @@ public class CertificateManager
 
     private string GetComputerSubjectName()
     {
-        string computerName = Dns.GetHostName();
-        string? distinguishedName = GetComputerDistinguishedName(computerName);
-        if (!string.IsNullOrWhiteSpace(distinguishedName))
-        {
-            return distinguishedName;
-        }
-        return GetFQDN(computerName);
+        return _systemInfoService.GetComputerSubjectName();
     }
 
     private string? GetComputerDistinguishedName(string computerName)
     {
-        // set up domain context
-        try
-        {
-            var context = new PrincipalContext(ContextType.Domain);
-
-            // find computer
-            var computer = ComputerPrincipal.FindByIdentity(context, computerName);
-
-            if (computer != null)
-            {
-                // get the Distinguished Name
-                return computer.DistinguishedName;
-            }
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine("Error getting computer distinguished name " + e.Message);
-            _logger?.LogError(e, "Error getting computer distinguished name");
-        }
-        return null;
+        return _systemInfoService.GetComputerDistinguishedName(computerName);
     }
 
-    private static string GetFQDN(string computerName = "")
+    private string GetFQDN(string computerName = "")
     {
-        // Get the host entry for the local computer.
-        if (string.IsNullOrWhiteSpace(computerName))
-        {
-            computerName = Dns.GetHostName();
-        }
-        var hostEntry = Dns.GetHostEntry(computerName);
-
-        // Return the first DNS name assigned to this address (should be the FQDN).
-        return hostEntry.HostName;
+        return _systemInfoService.GetFQDN(computerName);
     }
 
     private async Task<int> RegisterAndCreateCertAsync(RegisterArgModel values)
@@ -788,34 +762,7 @@ public class CertificateManager
 
     private void SetRDPCertificate(string thumbprint)
     {
-        string namespaceValue = @"root\cimv2\TerminalServices";
-        string queryDialect = "WQL";
-        string query = "SELECT * FROM Win32_TSGeneralSetting WHERE TerminalName = 'RDP-Tcp'";
-        string thumbprintProperty = "SSLCertificateSHA1Hash";
-        var dComOpts = new DComSessionOptions()
-        {
-            Culture = CultureInfo.CurrentCulture,
-            UICulture = CultureInfo.CurrentUICulture,
-            PacketIntegrity = true,
-            PacketPrivacy = true,
-            Timeout = new TimeSpan(0)
-        };
-        CimSession cimSession = CimSession.Create("localhost", dComOpts);
-        CimInstance? instance = cimSession
-            .QueryInstances(namespaceValue, queryDialect, query)
-            .ToArray()
-            .FirstOrDefault();
-        if (instance == null)
-        {
-            throw new Exception("Error getting RDP service");
-        }
-        var check = !instance.CimInstanceProperties[thumbprintProperty].Value.Equals(thumbprint);
-        if (check)
-        {
-            var prop = instance.CimInstanceProperties[thumbprintProperty];
-            prop.Value = thumbprint;
-            cimSession.ModifyInstance(instance);
-        }
+        _systemInfoService.SetRDPCertificate(thumbprint);
     }
 
     private async Task<X509Certificate2> CreateCertificateAsync(
@@ -867,7 +814,7 @@ public class CertificateManager
         {
             subjectName = "CN=" + subjectName;
         }
-        CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
+        CsrData csrData = _certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
             keyLength,
@@ -875,7 +822,7 @@ public class CertificateManager
             ekus,
             keyProvider
         );
-        string csr = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
+        string csr = csrData.CsrPem;
         X509Certificate2? windowsCert;
         if (dcCertificate)
         {
@@ -913,9 +860,9 @@ public class CertificateManager
                 $"Installing Windows Certificate for "
                     + $"{domain} with thumbprint {windowsCert.Thumbprint}"
             );
-            WindowsCertStoreService.InstallCertificate(
+            _certStoreService.InstallCertificate(
                 CryptoStaticService.ExportToPEM(windowsCert),
-                certRequest
+                csrData
             );
             _logger.LogInformation(
                 $"Successfully created certificate for "
@@ -987,7 +934,18 @@ public class CertificateManager
                     configureApplicationInsightsLoggerOptions: (_) => { }
                 );
             }
-            builder.AddEventLog();
+            // EventLog is Windows-only
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+#pragma warning disable CA1416
+                builder.AddEventLog();
+#pragma warning restore CA1416
+            }
+            else
+            {
+                // Add console logging for non-Windows platforms
+                builder.AddConsole();
+            }
         });
         if (!string.IsNullOrWhiteSpace(appInsightsKey))
         {

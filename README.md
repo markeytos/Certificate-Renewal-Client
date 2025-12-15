@@ -1,6 +1,6 @@
 # Certificate Renewal Client
 
-At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.io/azure-pki), easy-to-use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows that can:
+At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.io/azure-pki), easy-to-use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows and Linux that can:
 
 - [Register a new domain in EZCA](#register-a-new-domain-in-ezca)
 - [Create a new certificate](#create-a-new-certificate)
@@ -8,7 +8,44 @@ At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.
 - [Create a Domain Controller Certificate](#create-a-domain-controller-certificate)
 - [Create SCEP Certificates for Non-Managed Windows Devices](#create-scep-certificates-for-non-managed-windows-devices)
 
-This application can be used in combination with Windows Task Scheduler to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
+This application can be used in combination with Windows Task Scheduler or Linux cron jobs to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
+
+## Platform Support
+
+This application supports both **Windows** and **Linux** platforms:
+
+- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
+- **Linux**: Uses file-based certificate storage in `~/.ezca/certs` (user store) or `/etc/ezca/certs` (machine store)
+
+**Note**: Some features are Windows-specific:
+- RDP certificate configuration (requires Windows)
+- Domain Controller certificate features (requires Active Directory)
+- Windows Certificate Store integration
+
+On Linux, certificates are stored as PFX files in the file system with appropriate permissions.
+
+## Building from Source
+
+To build the application from source:
+
+### Prerequisites
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
+
+### Build Instructions
+
+```bash
+# Clone the repository
+git clone https://github.com/markeytos/Certificate-Renewal-Client.git
+cd Certificate-Renewal-Client/DotNetCertAuthSample
+
+# Build the project
+dotnet build
+
+# Run the application
+dotnet run --project DotNetCertAuthSample
+```
+
+The application will automatically detect the platform (Windows or Linux) and use the appropriate certificate storage and system APIs.
 
 ## Download Signed Binary
 
