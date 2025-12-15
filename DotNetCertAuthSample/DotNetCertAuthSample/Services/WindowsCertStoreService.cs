@@ -249,11 +249,20 @@ namespace DotNetCertAuthSample.Services
 
         public static CERTENROLLLib.X509KeyUsageFlags? GetKeyUsages(X509Certificate2 certificate)
         {
+            if (certificate == null)
+            {
+                throw new ArgumentNullException(nameof(certificate));
+            }
+
             foreach (var extension in certificate.Extensions)
             {
                 if (extension.Oid?.Value == "2.5.29.15") // Key Usage OID
                 {
-                    var keyUsageExt = (X509KeyUsageExtension)extension;
+                    if (extension is not X509KeyUsageExtension keyUsageExt)
+                    {
+                        continue;
+                    }
+                    
                     CERTENROLLLib.X509KeyUsageFlags flags = 0;
 
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature))
