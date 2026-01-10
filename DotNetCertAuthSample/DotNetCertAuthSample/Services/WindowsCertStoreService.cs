@@ -115,7 +115,8 @@ namespace DotNetCertAuthSample.Services
             int keylength,
             bool localStore,
             List<string> ekus,
-            string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
+            string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+            CERTENROLLLib.X509KeyUsageFlags? keyUsageFlags = null
         )
         {
             CX509CertificateRequestPkcs10 certRequest = new();
@@ -138,10 +139,11 @@ namespace DotNetCertAuthSample.Services
             certRequest.Subject = objDN;
             // Key Usage Extension
             CX509ExtensionKeyUsage extensionKeyUsage = new CX509ExtensionKeyUsage();
-            extensionKeyUsage.InitializeEncode(
-                CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
-                    | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE
-            );
+            // Use provided key usage flags or default to DigitalSignature and KeyEncipherment
+            CERTENROLLLib.X509KeyUsageFlags usageFlags = keyUsageFlags ??
+                (CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
+                    | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE);
+            extensionKeyUsage.InitializeEncode(usageFlags);
 
             certRequest.X509Extensions.Add((CX509Extension)extensionKeyUsage);
 
@@ -240,6 +242,67 @@ namespace DotNetCertAuthSample.Services
                 {
                     AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
                     return asnData.Format(true);
+                }
+            }
+            return null;
+        }
+
+        public static CERTENROLLLib.X509KeyUsageFlags? GetKeyUsages(X509Certificate2 certificate)
+        {
+            if (certificate == null)
+            {
+                throw new ArgumentNullException(nameof(certificate));
+            }
+
+            foreach (var extension in certificate.Extensions)
+            {
+                if (extension.Oid?.Value == "2.5.29.15") // Key Usage OID
+                {
+                    if (extension is not X509KeyUsageExtension keyUsageExt)
+                    {
+                        continue;
+                    }
+                    
+                    CERTENROLLLib.X509KeyUsageFlags flags = 0;
+
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.NonRepudiation))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_NON_REPUDIATION_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyEncipherment))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DataEncipherment))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DATA_ENCIPHERMENT_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyAgreement))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_AGREEMENT_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_CERT_SIGN_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.CrlSign))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_CRL_SIGN_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.EncipherOnly))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_ENCIPHER_ONLY_KEY_USAGE;
+                    }
+                    if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DecipherOnly))
+                    {
+                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DECIPHER_ONLY_KEY_USAGE;
+                    }
+
+                    return flags;
                 }
             }
             return null;
