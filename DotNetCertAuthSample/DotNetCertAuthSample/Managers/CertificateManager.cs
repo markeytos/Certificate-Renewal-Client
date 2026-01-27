@@ -560,7 +560,7 @@ public class CertificateManager
     {
         if (string.IsNullOrWhiteSpace(values.OutputPath))
         {
-            throw new ArgumentNullException(nameof(values.OutputPath));
+            throw new ArgumentException("OutputPath cannot be null or whitespace.", nameof(values.OutputPath));
         }
 
         string outputPath = values.OutputPath;
@@ -643,7 +643,7 @@ public class CertificateManager
             var trimmed = part.Trim();
             if (trimmed.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
             {
-                var cn = trimmed.Substring(3).Trim();
+                var cn = trimmed[3..].Trim();
                 // Remove any characters that are invalid for file names
                 foreach (char c in Path.GetInvalidFileNameChars())
                 {

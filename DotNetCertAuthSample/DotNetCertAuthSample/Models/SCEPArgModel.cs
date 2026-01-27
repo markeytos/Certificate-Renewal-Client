@@ -1,6 +1,5 @@
 using CommandLine;
 using EZCAClient.Models;
-using System.Security;
 
 namespace DotNetCertAuthSample.Models;
 
@@ -63,7 +62,7 @@ public class SCEPArgModel
         'o',
         "OutputPath",
         Required = false,
-        HelpText = "Optional file or directory path to save the certificate as a PFX file. If a directory is specified, the file will be named {SubjectName}.pfx"
+        HelpText = "Optional file or directory path to save the certificate as a PFX file. If a directory is specified, the file will be named {CN}.pfx"
     )]
     public string? OutputPath { get; set; }
 
