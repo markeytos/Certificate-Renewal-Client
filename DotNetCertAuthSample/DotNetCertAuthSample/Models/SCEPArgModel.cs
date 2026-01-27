@@ -1,5 +1,6 @@
 using CommandLine;
 using EZCAClient.Models;
+using System.Security;
 
 namespace DotNetCertAuthSample.Models;
 
@@ -57,4 +58,19 @@ public class SCEPArgModel
         HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
+
+    [Option(
+        'o',
+        "OutputPath",
+        Required = false,
+        HelpText = "Optional file or directory path to save the certificate as a PFX file. If a directory is specified, the file will be named {SubjectName}.pfx"
+    )]
+    public string? OutputPath { get; set; }
+
+    [Option(
+        "OutputPassword",
+        Required = false,
+        HelpText = "Optional password to protect the PFX file. If not specified, the PFX will not be password protected"
+    )]
+    public string? OutputPassword { get; set; }
 }

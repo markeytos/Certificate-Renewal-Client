@@ -494,7 +494,7 @@ public class CertificateManager
                 caCertificate,
                 nonceBytes,
                 cert,
-                values.LocalCertStore
+                values
             );
         }
         catch (Exception ex)
@@ -511,7 +511,7 @@ public class CertificateManager
         X509Certificate2 caCertificate,
         byte[] nonce,
         X509Certificate2 signingCert,
-        bool localStore
+        SCEPArgModel values
     )
     {
         var signedResponse = new SignedCms();
@@ -541,8 +541,125 @@ public class CertificateManager
         X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).Last();
         RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
-        WindowsCertStoreService.InstallFullCertificate(cert, localStore);
+
+        // Handle certificate output
+        if (!string.IsNullOrWhiteSpace(values.OutputPath))
+        {
+            // Export to file
+            ExportCertificateToPfx(cert, values);
+        }
+        else
+        {
+            // Install to certificate store (existing behavior)
+            WindowsCertStoreService.InstallFullCertificate(cert, values.LocalCertStore);
+        }
         return 0;
+    }
+
+    private void ExportCertificateToPfx(X509Certificate2 certificate, SCEPArgModel values)
+    {
+        if (string.IsNullOrWhiteSpace(values.OutputPath))
+        {
+            throw new ArgumentNullException(nameof(values.OutputPath));
+        }
+
+        string outputPath = values.OutputPath;
+        string finalFilePath;
+
+        // Determine if OutputPath is a directory or a file
+        bool isDirectory = Directory.Exists(outputPath) || 
+                          (!File.Exists(outputPath) && !Path.HasExtension(outputPath));
+
+        if (isDirectory)
+        {
+            // Ensure directory exists
+            if (!Directory.Exists(outputPath))
+            {
+                Directory.CreateDirectory(outputPath);
+                _logger?.LogInformation("Created directory: {OutputPath}", outputPath);
+                Console.WriteLine($"Created directory: {outputPath}");
+            }
+
+            // Extract CN from SubjectName for filename
+            string fileName = GetFileNameFromSubjectName(values.SubjectName);
+            finalFilePath = Path.Combine(outputPath, $"{fileName}.pfx");
+        }
+        else
+        {
+            // It's a file path
+            string? directory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+                _logger?.LogInformation("Created directory: {Directory}", directory);
+                Console.WriteLine($"Created directory: {directory}");
+            }
+            finalFilePath = outputPath;
+        }
+
+        // Check if file already exists
+        if (File.Exists(finalFilePath))
+        {
+            string errorMessage = $"File already exists: {finalFilePath}. Will not overwrite existing certificate file.";
+            _logger?.LogError(errorMessage);
+            Console.WriteLine($"Error: {errorMessage}");
+            throw new IOException(errorMessage);
+        }
+
+        // Export certificate to PFX
+        byte[] pfxBytes;
+        if (!string.IsNullOrWhiteSpace(values.OutputPassword))
+        {
+            pfxBytes = certificate.Export(X509ContentType.Pfx, values.OutputPassword);
+            _logger?.LogInformation("Exporting password-protected certificate to: {FilePath}", finalFilePath);
+            Console.WriteLine($"Exporting password-protected certificate to: {finalFilePath}");
+        }
+        else
+        {
+            pfxBytes = certificate.Export(X509ContentType.Pfx);
+            _logger?.LogWarning("Exporting certificate without password protection to: {FilePath}. The certificate contains the private key and should be protected.", finalFilePath);
+            Console.WriteLine($"WARNING: Exporting certificate without password protection to: {finalFilePath}");
+            Console.WriteLine("WARNING: The certificate contains the private key and should be protected when distributing.");
+        }
+
+        // Write to file
+        File.WriteAllBytes(finalFilePath, pfxBytes);
+        _logger?.LogInformation("Certificate successfully exported to: {FilePath}", finalFilePath);
+        Console.WriteLine($"Certificate successfully exported to: {finalFilePath}");
+    }
+
+    private string GetFileNameFromSubjectName(string? subjectName)
+    {
+        if (string.IsNullOrWhiteSpace(subjectName))
+        {
+            return "certificate";
+        }
+
+        // Try to extract CN from subject name
+        // SubjectName format: CN=server1.contoso.com,OU=...,DC=...
+        var parts = subjectName.Split(',');
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+            {
+                var cn = trimmed.Substring(3).Trim();
+                // Remove any characters that are invalid for file names
+                foreach (char c in Path.GetInvalidFileNameChars())
+                {
+                    cn = cn.Replace(c, '_');
+                }
+                return cn;
+            }
+        }
+
+        // If no CN found, use the whole subject name (sanitized)
+        string sanitized = subjectName;
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return sanitized;
     }
 
     private static X509Certificate2 GenerateSelfSignedCertificate(
