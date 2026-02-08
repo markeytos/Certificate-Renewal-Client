@@ -12,7 +12,10 @@ This application can be used in combination with Windows Task Scheduler to autom
 
 ## Download Signed Binary
 
-https://download.keytos.io/Downloads/CertificateManager/EZCACertManager.exe 
+1. Navigate to the releases section
+    <img width="1562" height="787" alt="image" src="https://github.com/user-attachments/assets/cc6dbf42-0625-48be-9a8f-348e3967e1b3" />
+1. Download the latest executable
+  <img width="1396" height="552" alt="image" src="https://github.com/user-attachments/assets/60d6c1ea-0577-4b68-8ced-539bbfac60b4" />
 
 ## Commands
 
