@@ -3,7 +3,7 @@ namespace DotNetCertAuthSample.Models;
 public class X509SubjectAlternativeName
 {
     public SANTypes Type { get; set; }
-    public string Value { get; set; }
+    public string Value { get; set; } = string.Empty;
 }
 
 public enum SANTypes
@@ -14,5 +14,5 @@ public enum SANTypes
     DirectoryName,
     IPAddress,
     URI,
-    Unknown
+    Unknown,
 }

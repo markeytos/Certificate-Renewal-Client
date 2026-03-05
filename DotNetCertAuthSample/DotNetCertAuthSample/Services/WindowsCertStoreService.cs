@@ -142,9 +142,12 @@ namespace DotNetCertAuthSample.Services
             // Key Usage Extension
             CX509ExtensionKeyUsage extensionKeyUsage = new CX509ExtensionKeyUsage();
             // Use provided key usage flags or default to DigitalSignature and KeyEncipherment
-            CERTENROLLLib.X509KeyUsageFlags usageFlags = keyUsageFlags ??
-                (CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
-                    | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE);
+            CERTENROLLLib.X509KeyUsageFlags usageFlags =
+                keyUsageFlags
+                ?? (
+                    CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
+                    | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE
+                );
             extensionKeyUsage.InitializeEncode(usageFlags);
 
             certRequest.X509Extensions.Add((CX509Extension)extensionKeyUsage);
@@ -165,11 +168,11 @@ namespace DotNetCertAuthSample.Services
             }
 
             certRequest.Encode();
-            
+
             return new CsrData
             {
                 CsrPem = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER],
-                PrivateKeyContext = certRequest
+                PrivateKeyContext = certRequest,
             };
         }
 
@@ -177,9 +180,11 @@ namespace DotNetCertAuthSample.Services
         {
             if (csrData.PrivateKeyContext is not CX509CertificateRequestPkcs10 certRequest)
             {
-                throw new ArgumentException("Invalid CSR context for Windows certificate installation");
+                throw new ArgumentException(
+                    "Invalid CSR context for Windows certificate installation"
+                );
             }
-            
+
             CX509Enrollment objEnroll = new();
             objEnroll.InitializeFromRequest(certRequest);
             objEnroll.CreateRequest(EncodingType.XCN_CRYPT_STRING_BASE64);
@@ -193,8 +198,9 @@ namespace DotNetCertAuthSample.Services
 
         public void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
         {
-            X509Store store =
-                new(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
+            X509Store store = new(
+                localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
+            );
             store.Open(OpenFlags.ReadWrite);
             store.Add(certificate);
             store.Close();
@@ -271,12 +277,14 @@ namespace DotNetCertAuthSample.Services
                     {
                         continue;
                     }
-                    
+
                     CERTENROLLLib.X509KeyUsageFlags flags = 0;
 
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature))
                     {
-                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE;
+                        flags |= CERTENROLLLib
+                            .X509KeyUsageFlags
+                            .XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE;
                     }
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.NonRepudiation))
                     {
@@ -284,11 +292,15 @@ namespace DotNetCertAuthSample.Services
                     }
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyEncipherment))
                     {
-                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+                        flags |= CERTENROLLLib
+                            .X509KeyUsageFlags
+                            .XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
                     }
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DataEncipherment))
                     {
-                        flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DATA_ENCIPHERMENT_KEY_USAGE;
+                        flags |= CERTENROLLLib
+                            .X509KeyUsageFlags
+                            .XCN_CERT_DATA_ENCIPHERMENT_KEY_USAGE;
                     }
                     if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyAgreement))
                     {

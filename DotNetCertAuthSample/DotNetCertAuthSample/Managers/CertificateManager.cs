@@ -49,7 +49,10 @@ public class CertificateManager
     private readonly ICertStoreService _certStoreService;
     private readonly ISystemInfoService _systemInfoService;
 
-    public CertificateManager(ICertStoreService certStoreService, ISystemInfoService systemInfoService)
+    public CertificateManager(
+        ICertStoreService certStoreService,
+        ISystemInfoService systemInfoService
+    )
     {
         _certStoreService = certStoreService;
         _systemInfoService = systemInfoService;
@@ -164,10 +167,10 @@ public class CertificateManager
                 values.template
             );
             CsrData csrData = _certStoreService.CreateCSR(
-            // Extract key usages from the existing certificate
-            // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
-            //
-            // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
+                // Extract key usages from the existing certificate
+                // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
+                //
+                // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -245,7 +248,7 @@ public class CertificateManager
             List<string> ekus =
             [
                 EZCAConstants.ServerAuthenticationEKU,
-                EZCAConstants.ClientAuthenticationEKU
+                EZCAConstants.ClientAuthenticationEKU,
             ];
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
                 values.Domain,
@@ -335,8 +338,11 @@ public class CertificateManager
                     .ToList();
             }
 
-            AvailableCAModel selectedCA =
-                new() { CAID = values.caID, TemplateID = values.TemplateID, };
+            AvailableCAModel selectedCA = new()
+            {
+                CAID = values.caID,
+                TemplateID = values.TemplateID,
+            };
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
                 values.Domain,
                 values.SubjectName,
@@ -393,7 +399,7 @@ public class CertificateManager
                 values.EKUs =
                 [
                     EZCAConstants.ClientAuthenticationEKU,
-                    EZCAConstants.ServerAuthenticationEKU
+                    EZCAConstants.ServerAuthenticationEKU,
                 ];
             }
             if (values.KeyLength != 2048 && values.KeyLength != 4096)

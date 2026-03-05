@@ -30,6 +30,11 @@ public class Program
             certStoreService = new LinuxCertStoreService();
             systemInfoService = new LinuxSystemInfoService();
         }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            certStoreService = new MacCertStoreService();
+            systemInfoService = new MacSystemInfoService();
+        }
         else
         {
             Console.WriteLine("Unsupported operating system");

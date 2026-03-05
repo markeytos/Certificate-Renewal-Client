@@ -68,7 +68,7 @@ namespace DotNetCertAuthSample.Services
                 UICulture = CultureInfo.CurrentUICulture,
                 PacketIntegrity = true,
                 PacketPrivacy = true,
-                Timeout = new TimeSpan(0)
+                Timeout = new TimeSpan(0),
             };
             CimSession cimSession = CimSession.Create("localhost", dComOpts);
             CimInstance? instance = cimSession
@@ -79,7 +79,9 @@ namespace DotNetCertAuthSample.Services
             {
                 throw new Exception("Error getting RDP service");
             }
-            var check = !instance.CimInstanceProperties[thumbprintProperty].Value.Equals(thumbprint);
+            var check = !instance
+                .CimInstanceProperties[thumbprintProperty]
+                .Value.Equals(thumbprint);
             if (check)
             {
                 var prop = instance.CimInstanceProperties[thumbprintProperty];

@@ -25,7 +25,7 @@ public class SCEPArgModel
     )]
     public string? EKUsInputs { get; set; }
     public List<string> EKUs { get; set; } =
-        [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
+    [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
 
     [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;

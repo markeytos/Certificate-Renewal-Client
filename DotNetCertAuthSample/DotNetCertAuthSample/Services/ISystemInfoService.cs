@@ -1,13 +1,12 @@
-namespace DotNetCertAuthSample.Services
+namespace DotNetCertAuthSample.Services;
+
+public interface ISystemInfoService
 {
-    public interface ISystemInfoService
-    {
-        string GetFQDN(string computerName = "");
-        
-        string? GetComputerDistinguishedName(string computerName);
-        
-        string GetComputerSubjectName();
-        
-        void SetRDPCertificate(string thumbprint);
-    }
+    string GetFQDN(string computerName = "");
+
+    string? GetComputerDistinguishedName(string computerName);
+
+    string GetComputerSubjectName();
+
+    void SetRDPCertificate(string thumbprint);
 }
