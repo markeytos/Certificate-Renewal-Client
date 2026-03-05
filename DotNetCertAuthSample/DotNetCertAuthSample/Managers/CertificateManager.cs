@@ -164,6 +164,10 @@ public class CertificateManager
                 values.template
             );
             CsrData csrData = _certStoreService.CreateCSR(
+            // Extract key usages from the existing certificate
+            // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
+            //
+            // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -172,7 +176,8 @@ public class CertificateManager
                 values.KeyLength,
                 values.LocalCertStore,
                 new(),
-                values.KeyProvider
+                values.KeyProvider,
+                keyUsages
             );
             string csr = csrData.CsrPem;
             _logger.LogInformation($"Renewing certificate");
@@ -318,7 +323,7 @@ public class CertificateManager
             {
                 throw new ArgumentException("Key length must be 2048 or 4096");
             }
-            
+
             // Process additional SubjectAltNames if provided
             List<string>? additionalSANs = null;
             if (!string.IsNullOrWhiteSpace(values.SubjectAltNames))
@@ -329,7 +334,7 @@ public class CertificateManager
                     .Where(san => !string.IsNullOrWhiteSpace(san))
                     .ToList();
             }
-            
+
             AvailableCAModel selectedCA =
                 new() { CAID = values.caID, TemplateID = values.TemplateID, };
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
@@ -797,7 +802,7 @@ public class CertificateManager
         }
         // Start with domain as first SAN
         List<string> subjectAltNames = [domain];
-        
+
         // Add additional SANs if provided, with deduplication
         if (additionalSubjectAltNames?.Count > 0)
         {
@@ -806,7 +811,7 @@ public class CertificateManager
                 .ToList();
             subjectAltNames.AddRange(newSans);
         }
-        
+
         if (
             !subjectName.StartsWith("CN=", StringComparison.InvariantCultureIgnoreCase)
             && !subjectName.StartsWith("CN =", StringComparison.InvariantCultureIgnoreCase)
