@@ -22,8 +22,8 @@ public class LinuxCertStoreService : ICertStoreService
 
     public LinuxCertStoreService()
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        _certStorePath = Path.Combine(homeDir, ".ezca", "certs");
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        _certStorePath = Path.Combine(homeDir, ".keytos", "ezca", "certs");
 
         if (!Directory.Exists(_certStorePath))
         {
@@ -38,7 +38,6 @@ public class LinuxCertStoreService : ICertStoreService
         string templateName = ""
     )
     {
-        // On Linux, we'll search for certificates in our custom store
         string storePath = GetStorePath(localStore);
 
         if (!Directory.Exists(storePath))
@@ -100,7 +99,7 @@ public class LinuxCertStoreService : ICertStoreService
         List<bool> localStoreOptions = [true, false];
         foreach (bool localStore in localStoreOptions)
         {
-            X509Certificate2? cert = GetCertFromStoreByThumbprintg(thumbprint, localStore);
+            X509Certificate2? cert = GetCertFromStoreByThumbprint(thumbprint, localStore);
             if (cert is not null)
             {
                 return cert;
@@ -110,7 +109,7 @@ public class LinuxCertStoreService : ICertStoreService
         return null;
     }
 
-    private X509Certificate2? GetCertFromStoreByThumbprintg(string thumbprint, bool localStore)
+    private X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint, bool localStore)
     {
         string storePath = GetStorePath(localStore);
 
@@ -144,7 +143,8 @@ public class LinuxCertStoreService : ICertStoreService
         int keylength,
         bool localStore,
         List<string> ekus,
-        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
+        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+        List<X509KeyUsageFlags>? keyUsageFlags = null
     )
     {
         // Generate RSA key pair using BouncyCastle
@@ -207,10 +207,10 @@ public class LinuxCertStoreService : ICertStoreService
         bool localStore = true; // Default to machine store
 
         // Install the certificate
-        InstallFullCertificate(certWithKey, localStore);
+        InstallCertificateWithPrivateKey(certWithKey, localStore);
     }
 
-    public void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
+    public void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore)
     {
         string storePath = GetStorePath(localStore);
 

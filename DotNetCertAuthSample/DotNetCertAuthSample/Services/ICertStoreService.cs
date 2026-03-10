@@ -19,10 +19,11 @@ public interface ICertStoreService
         int keylength,
         bool localStore,
         List<string> ekus,
-        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0"
+        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+        List<X509KeyUsageFlags>? keyUsageFlags = null
     );
 
     void InstallCertificate(string cert, CsrData csrData);
 
-    void InstallFullCertificate(X509Certificate2 certificate, bool localStore);
+    void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore);
 }

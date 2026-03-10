@@ -12,7 +12,6 @@ using EZCAClient.Managers;
 using EZCAClient.Models;
 using EZCAClient.Services;
 using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1;
@@ -33,6 +32,7 @@ using Org.BouncyCastle.X509.Extension;
 using ContentInfo = System.Security.Cryptography.Pkcs.ContentInfo;
 using SignerInfo = System.Security.Cryptography.Pkcs.SignerInfo;
 using X509Certificate = Org.BouncyCastle.X509.X509Certificate;
+using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 
 namespace DotNetCertAuthSample.Managers;
 
@@ -44,6 +44,7 @@ public class CertificateManager
     private RegisterArgModel? _registerArgModel;
     private CreateDCCertificate? _createDCCertArgModel;
     private SCEPArgModel? _scepArgModel;
+    private TestModel? _testModel;
     private HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
     private readonly ICertStoreService _certStoreService;
@@ -101,6 +102,12 @@ public class CertificateManager
         return 0;
     }
 
+    public int InitializeManager(TestModel values)
+    {
+        _testModel = values;
+        return 0;
+    }
+
     public int ProcessError(IEnumerable<Error> errs)
     {
         return 1;
@@ -129,12 +136,31 @@ public class CertificateManager
         {
             response = await CreateSCEPCertificate(_scepArgModel);
         }
+        else if (_testModel != null)
+        {
+            response = await TestAsync();
+        }
         if (_telemetryClient != null)
         {
             await _telemetryClient.FlushAsync(CancellationToken.None);
             Thread.Sleep(5000);
         }
         return response;
+    }
+
+    private async Task<int> TestAsync()
+    {
+        Console.WriteLine(
+            "This is a test method to validate that everything is working fine. It will try to find a certificate with subject CN=localhost in the user store."
+        );
+        X509Certificate2 certificate = _certStoreService.GetCertFromStoreBySubject(
+            "localhost",
+            true
+        );
+        Console.WriteLine($"Found certificate: {certificate.Subject}");
+        Console.WriteLine($"Found certificate: {certificate.NotAfter}");
+        Console.WriteLine("Test completed successfully");
+        return 1;
     }
 
     private async Task<int> RenewAsync(RenewArgModel values)
@@ -166,11 +192,20 @@ public class CertificateManager
                 values.issuer,
                 values.template
             );
+            X509ExtensionCollection extensions = cert.Extensions;
+            List<X509KeyUsageFlags> keyUsages = [];
+            foreach (X509Extension ext in extensions)
+            {
+                if (ext is X509KeyUsageExtension keyUsage)
+                {
+                    keyUsages.Add(keyUsage.KeyUsages);
+                }
+            }
+
+            // Extract key usages from the existing certificate
+            // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
+            // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
             CsrData csrData = _certStoreService.CreateCSR(
-                // Extract key usages from the existing certificate
-                // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
-                //
-                // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -178,14 +213,14 @@ public class CertificateManager
                     .ToList(),
                 values.KeyLength,
                 values.LocalCertStore,
-                new(),
+                [],
                 values.KeyProvider,
                 keyUsages
             );
             string csr = csrData.CsrPem;
             _logger.LogInformation($"Renewing certificate");
             Console.WriteLine($"Renewing certificate");
-            IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), _logger, values.url);
+            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
             _certStoreService.InstallCertificate(createdCert, csrData);
             _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
@@ -552,7 +587,7 @@ public class CertificateManager
         RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
 #pragma warning restore CA1416
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
-        _certStoreService.InstallFullCertificate(cert, localStore);
+        _certStoreService.InstallCertificateWithPrivateKey(cert, localStore);
         return 0;
     }
 

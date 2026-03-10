@@ -118,7 +118,7 @@ namespace DotNetCertAuthSample.Services
             bool localStore,
             List<string> ekus,
             string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-            CERTENROLLLib.X509KeyUsageFlags? keyUsageFlags = null
+            List<X509KeyUsageFlags> keyUsageFlags = null,
         )
         {
             CX509CertificateRequestPkcs10 certRequest = new();
