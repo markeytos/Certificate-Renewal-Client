@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -20,7 +21,7 @@ public interface ICertStoreService
         bool localStore,
         List<string> ekus,
         string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-        List<X509KeyUsageFlags>? keyUsageFlags = null
+        X509KeyUsage? keyUsageFlags = null
     );
 
     void InstallCertificate(string cert, CsrData csrData, bool localStore);

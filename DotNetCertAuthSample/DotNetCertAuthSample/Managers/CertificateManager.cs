@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -171,23 +172,9 @@ public class CertificateManager
         try
         {
             _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
-            if (values is { RDPCert: true, LocalCertStore: false })
-            {
-                throw new ArgumentException(
-                    "If certificate will be used for RDP it must be stored in the local store"
-                );
-            }
-            AssertLocalStoreProperties(values.LocalCertStore);
-            if (string.IsNullOrWhiteSpace(values.Domain))
-            {
-                throw new ArgumentNullException(nameof(values.Domain));
-            }
-            if (values.KeyLength != 2048 && values.KeyLength != 4096)
-            {
-                throw new ArgumentException("Key length must be 2048 or 4096");
-            }
+            AssertCorrectRenewArgModel(values);
             X509Certificate2 cert = _certStoreService.GetCertFromStoreBySubject(
-                values.Domain.Replace("CN=", "").Trim(),
+                values.Domain!.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
                 values.template
@@ -203,8 +190,6 @@ public class CertificateManager
             }
 
             // Extract key usages from the existing certificate
-            // CERTENROLLLib.X509KeyUsageFlags? keyUsages = WindowsCertStoreService.GetKeyUsages(cert);
-            // CX509CertificateRequestPkcs10 certRequest = WindowsCertStoreService.CreateCSR(
             CsrData csrData = _certStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
@@ -241,6 +226,34 @@ public class CertificateManager
         return 0;
     }
 
+    private static void AssertCorrectRenewArgModel(RenewArgModel values)
+    {
+        AssertRdpSupported(values.RDPCert, values.LocalCertStore);
+        AssertLocalStoreProperties(values.LocalCertStore);
+        if (string.IsNullOrWhiteSpace(values.Domain))
+        {
+            throw new ArgumentNullException(nameof(values.Domain));
+        }
+        if (values.KeyLength != 2048 && values.KeyLength != 4096)
+        {
+            throw new ArgumentException("Key length must be 2048 or 4096");
+        }
+    }
+
+    private static void AssertRdpSupported(bool rdpCert, bool localCertStore)
+    {
+        if (!OperatingSystem.IsWindows() && rdpCert)
+        {
+            throw new ArgumentException("RDP certificates are only supported on Windows");
+        }
+        if (rdpCert && !localCertStore)
+        {
+            throw new ArgumentException(
+                "If certificate will be used for RDP it must be stored in the local store"
+            );
+        }
+    }
+
     private async Task<int> CreateCertAsync(GenerateArgModel values)
     {
         if (_logger == null)
@@ -249,33 +262,7 @@ public class CertificateManager
         }
         try
         {
-            if (values is { RDPCert: true, LocalCertStore: false })
-            {
-                throw new ArgumentException(
-                    "If certificate will be used for RDP it must be stored in the local store"
-                );
-            }
-            if (values.RDPCert && !OperatingSystem.IsWindows())
-            {
-                throw new ArgumentException("RDP is only supported on Windows");
-            }
-            AssertLocalStoreProperties(values.LocalCertStore);
-            if (!IsGuid(values.caID))
-            {
-                throw new ArgumentException("Please enter a valid CA ID Guid");
-            }
-            if (string.IsNullOrWhiteSpace(values.Domain))
-            {
-                values.Domain = GetFQDN();
-                if (string.IsNullOrWhiteSpace(values.Domain))
-                {
-                    throw new ArgumentNullException(nameof(values.Domain));
-                }
-            }
-            if (values.KeyLength != 2048 && values.KeyLength != 4096)
-            {
-                throw new ArgumentException("Key length must be 2048 or 4096");
-            }
+            ValidateGenerateArgModel(values);
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(),
                 _logger,
@@ -291,8 +278,8 @@ public class CertificateManager
                 EZCAConstants.ClientAuthenticationEKU,
             ];
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
-                values.Domain,
-                values.Domain,
+                values.Domain!,
+                values.Domain!,
                 values.LocalCertStore,
                 selectedCA,
                 values.Validity,
@@ -315,6 +302,28 @@ public class CertificateManager
             return 1;
         }
         return 0;
+    }
+
+    private void ValidateGenerateArgModel(GenerateArgModel values)
+    {
+        AssertRdpSupported(values.RDPCert, values.LocalCertStore);
+        AssertLocalStoreProperties(values.LocalCertStore);
+        if (!IsGuid(values.caID))
+        {
+            throw new ArgumentException("Please enter a valid CA ID Guid");
+        }
+        if (string.IsNullOrWhiteSpace(values.Domain))
+        {
+            values.Domain = GetFQDN();
+            if (string.IsNullOrWhiteSpace(values.Domain))
+            {
+                throw new ArgumentNullException(nameof(values.Domain));
+            }
+        }
+        if (values.KeyLength != 2048 && values.KeyLength != 4096)
+        {
+            throw new ArgumentException("Key length must be 2048 or 4096");
+        }
     }
 
     private static void AssertCanWriteToStore(bool localStore)
@@ -357,37 +366,7 @@ public class CertificateManager
         {
             bool localStore = true;
             AssertLocalStoreProperties(localStore);
-            if (!IsGuid(values.caID))
-            {
-                throw new ArgumentException("Please enter a valid CA ID Guid");
-            }
-            if (!IsGuid(values.TemplateID))
-            {
-                throw new ArgumentException("Please enter a valid Template ID Guid");
-            }
-            if (string.IsNullOrWhiteSpace(values.Domain))
-            {
-                values.Domain = GetFQDN();
-                if (string.IsNullOrWhiteSpace(values.Domain))
-                {
-                    throw new ArgumentNullException(nameof(values.Domain));
-                }
-            }
-            if (string.IsNullOrWhiteSpace(values.SubjectName))
-            {
-                values.SubjectName = GetComputerSubjectName();
-                if (string.IsNullOrWhiteSpace(values.SubjectName))
-                {
-                    throw new ArgumentNullException(
-                        nameof(values.SubjectName),
-                        "Please enter a valid Subject Name"
-                    );
-                }
-            }
-            if (values.EKUs == null || values.EKUs.Count == 0)
-            {
-                values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
-            }
+            ValidateCreateDCCertificateModel(values);
             IEZCAClient ezcaClient = new EZCAClientClass(
                 new HttpClient(),
                 _logger,
@@ -439,6 +418,41 @@ public class CertificateManager
         return 0;
     }
 
+    private void ValidateCreateDCCertificateModel(CreateDCCertificate values)
+    {
+        if (!IsGuid(values.caID))
+        {
+            throw new ArgumentException("Please enter a valid CA ID Guid");
+        }
+        if (!IsGuid(values.TemplateID))
+        {
+            throw new ArgumentException("Please enter a valid Template ID Guid");
+        }
+        if (string.IsNullOrWhiteSpace(values.Domain))
+        {
+            values.Domain = GetFQDN();
+            if (string.IsNullOrWhiteSpace(values.Domain))
+            {
+                throw new ArgumentNullException(nameof(values.Domain));
+            }
+        }
+        if (string.IsNullOrWhiteSpace(values.SubjectName))
+        {
+            values.SubjectName = GetComputerSubjectName();
+            if (string.IsNullOrWhiteSpace(values.SubjectName))
+            {
+                throw new ArgumentNullException(
+                    nameof(values.SubjectName),
+                    "Please enter a valid Subject Name"
+                );
+            }
+        }
+        if (values.EKUs == null || values.EKUs.Count == 0)
+        {
+            values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
+        }
+    }
+
     private async Task<int> CreateSCEPCertificate(SCEPArgModel values)
     {
         if (_logger == null)
@@ -447,48 +461,7 @@ public class CertificateManager
         }
         try
         {
-            AssertLocalStoreProperties(values.LocalCertStore);
-            if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
-            {
-                values.SubjectAltNames = GetFQDN();
-                if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
-                {
-                    throw new ArgumentNullException(nameof(values.SubjectAltNames));
-                }
-            }
-            if (string.IsNullOrWhiteSpace(values.SubjectName))
-            {
-                values.SubjectName = GetComputerSubjectName();
-                if (string.IsNullOrWhiteSpace(values.SubjectName))
-                {
-                    throw new ArgumentNullException(
-                        nameof(values.SubjectName),
-                        "Please enter a valid Subject Name"
-                    );
-                }
-            }
-            if (values.EKUs is null or { Count: 0 })
-            {
-                values.EKUs =
-                [
-                    EZCAConstants.ClientAuthenticationEKU,
-                    EZCAConstants.ServerAuthenticationEKU,
-                ];
-            }
-            if (values.KeyLength != 2048 && values.KeyLength != 4096)
-            {
-                throw new ArgumentException("Key length must be 2048 or 4096");
-            }
-            if (string.IsNullOrWhiteSpace(values.url))
-            {
-                throw new ArgumentNullException(nameof(values.url));
-            }
-            //TIP: you can hardcode the password here or use a secure secret manager to avoid having the password in the Script
-            // values.SCEPPassword = "YourPassword";
-            if (string.IsNullOrWhiteSpace(values.SCEPPassword))
-            {
-                throw new ArgumentNullException(nameof(values.SCEPPassword));
-            }
+            ValidateSCEPArgModel(values);
             _logger.LogInformation(
                 "Creating SCEP certificate for {SubjectName}",
                 values.SubjectName
@@ -508,6 +481,53 @@ public class CertificateManager
             _logger.LogError(ex, "Error creating SCEP certificate");
             Console.WriteLine("Error creating certificate: " + ex.Message);
             return 1;
+        }
+    }
+
+    private void ValidateSCEPArgModel(SCEPArgModel values)
+    {
+        AssertLocalStoreProperties(values.LocalCertStore);
+        if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
+        {
+            values.SubjectAltNames = GetFQDN();
+            if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
+            {
+                throw new ArgumentNullException(nameof(values.SubjectAltNames));
+            }
+        }
+        if (string.IsNullOrWhiteSpace(values.SubjectName))
+        {
+            values.SubjectName = GetComputerSubjectName();
+            if (string.IsNullOrWhiteSpace(values.SubjectName))
+            {
+                throw new ArgumentNullException(
+                    nameof(values.SubjectName),
+                    "Please enter a valid Subject Name"
+                );
+            }
+        }
+        if (values.EKUs is null or { Count: 0 })
+        {
+            values.EKUs =
+            [
+                EZCAConstants.ClientAuthenticationEKU,
+                EZCAConstants.ServerAuthenticationEKU,
+            ];
+        }
+        if (values.KeyLength != 2048 && values.KeyLength != 4096)
+        {
+            throw new ArgumentException("Key length must be 2048 or 4096");
+        }
+        if (string.IsNullOrWhiteSpace(values.url))
+        {
+            throw new ArgumentNullException(nameof(values.url));
+        }
+
+        // TIP: you can hardcode the password here or use a secure secret manager to avoid having the password in the Script
+        // values.SCEPPassword = "YourPassword";
+        if (string.IsNullOrWhiteSpace(values.SCEPPassword))
+        {
+            throw new ArgumentNullException(nameof(values.SCEPPassword));
         }
     }
 
@@ -668,10 +688,10 @@ public class CertificateManager
     )
     {
         // Create the certificate generator
-        X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
+        X509V3CertificateGenerator certGen = new();
 
         // Set certificate subject and issuer (self-signed so issuer is the same as the subject)
-        X509Name issuerName = new X509Name($"CN={subjectName}");
+        X509Name issuerName = new($"CN={subjectName}");
         certGen.SetIssuerDN(issuerName);
         certGen.SetSubjectDN(issuerName);
 
@@ -779,7 +799,7 @@ public class CertificateManager
         var random = new SecureRandom(randomGenerator);
         if (keyAlgo.Contains("RSA", StringComparison.OrdinalIgnoreCase))
         {
-            int strength = Int32.Parse(keyAlgo.Split(" ")[1]);
+            int strength = int.Parse(keyAlgo.Split(" ")[1]);
             var keyGenerationParameters = new KeyGenerationParameters(random, strength);
             var keyPairGenerator = new RsaKeyPairGenerator();
             keyPairGenerator.Init(keyGenerationParameters);
@@ -850,25 +870,14 @@ public class CertificateManager
         }
         try
         {
-            if (!IsGuid(values.caID))
-            {
-                throw new ArgumentException("Please enter a valid CA ID Guid");
-            }
-            if (string.IsNullOrWhiteSpace(values.Domain))
-            {
-                values.Domain = GetFQDN();
-                if (string.IsNullOrWhiteSpace(values.Domain))
-                {
-                    throw new ArgumentNullException(nameof(values.Domain));
-                }
-            }
+            ValidateRegisterArgModel(values);
             IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), _logger, values.url);
             _logger.LogInformation("Getting available CAs");
             Console.WriteLine("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
             APIResultModel registrationResult = await ezcaClient.RegisterDomainAsync(
                 selectedCA,
-                values.Domain
+                values.Domain!
             );
             _logger.LogInformation($"Registering domain: {values.Domain}");
             Console.WriteLine($"Registering domain: {values.Domain}");
@@ -888,6 +897,22 @@ public class CertificateManager
             return 1;
         }
         return 0;
+    }
+
+    private void ValidateRegisterArgModel(RegisterArgModel values)
+    {
+        if (!IsGuid(values.caID))
+        {
+            throw new ArgumentException("Please enter a valid CA ID Guid");
+        }
+        if (string.IsNullOrWhiteSpace(values.Domain))
+        {
+            values.Domain = GetFQDN();
+            if (string.IsNullOrWhiteSpace(values.Domain))
+            {
+                throw new ArgumentNullException(nameof(values.Domain));
+            }
+        }
     }
 
     private void SetRDPCertificate(string thumbprint)
@@ -1054,14 +1079,12 @@ public class CertificateManager
                     configureApplicationInsightsLoggerOptions: (_) => { }
                 );
             }
-            // EventLog is Windows-only
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 builder.AddEventLog();
             }
             else
             {
-                // Add console logging for non-Windows platforms
                 builder.AddConsole();
             }
         });

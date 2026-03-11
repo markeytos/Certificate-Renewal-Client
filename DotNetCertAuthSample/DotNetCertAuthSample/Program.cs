@@ -61,7 +61,6 @@ public class Program
             );
         if (result == 0)
         {
-            Console.WriteLine("Operation completed successfully. Runnign action");
             result = await certificateManager.CallCertActionAsync();
         }
         return result;

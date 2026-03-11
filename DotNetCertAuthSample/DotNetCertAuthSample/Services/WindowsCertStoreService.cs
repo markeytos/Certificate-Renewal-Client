@@ -2,6 +2,9 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 
 namespace DotNetCertAuthSample.Services;
@@ -116,7 +119,7 @@ public class WindowsCertStoreService : ICertStoreService
         bool localStore,
         List<string> ekus,
         string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-        List<X509KeyUsageFlags>? keyUsageFlags = null
+        X509KeyUsage? keyUsageFlags = null
     )
     {
         CX509CertificateRequestPkcs10 certRequest = new();
@@ -315,6 +318,56 @@ public class WindowsCertStoreService : ICertStoreService
             }
         }
         return null;
+    }
+
+    public static CERTENROLLLib.X509KeyUsageFlags? ConvertKeyUsage(X509KeyUsage keyUsage)
+    {
+        CERTENROLLLib.X509KeyUsageFlags flags = 0;
+
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.NonRepudiation))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_NON_REPUDIATION_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyEncipherment))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DataEncipherment))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DATA_ENCIPHERMENT_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyAgreement))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_AGREEMENT_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_CERT_SIGN_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.CrlSign))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_CRL_SIGN_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.EncipherOnly))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_ENCIPHER_ONLY_KEY_USAGE;
+        }
+        if (keyUsageExt.KeyUsages.HasFlag(X509KeyUsageFlags.DecipherOnly))
+        {
+            flags |= CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DECIPHER_ONLY_KEY_USAGE;
+        }
+
+        return flags;
+    }
+
+    private static HasFlag(X509KeyUsage keyUsage, X509KeyUsageFlags flag)
+    {
+        Asn1Object keyUsageAsn = keyUsage.ToAsn1Object();
+        return (keyUsage & flag) == 1;
     }
 }
 #endif

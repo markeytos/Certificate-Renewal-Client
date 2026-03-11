@@ -1,16 +1,9 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using EZCAClient.Services;
-using Org.BouncyCastle.Asn1;
-using Org.BouncyCastle.Asn1.Pkcs;
-using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.OpenSsl;
-using Org.BouncyCastle.Pkcs;
-using Org.BouncyCastle.Security;
+using Org.BouncyCastle.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -22,41 +15,11 @@ public class MacCertStoreService : ICertStoreService
         int keylength,
         bool localStore,
         List<string> ekus,
-        string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-        List<X509KeyUsageFlags>? keyUsageFlags = null
+        string keyProvider = "",
+        X509KeyUsage? keyUsage = null
     )
     {
-        // TODO: combine with Linux because same
-
-        // Generate RSA key pair using BouncyCastle
-        var randomGenerator = new Org.BouncyCastle.Crypto.Prng.CryptoApiRandomGenerator();
-        var random = new SecureRandom(randomGenerator);
-        var keyGenerationParameters = new KeyGenerationParameters(random, keylength);
-        var keyPairGenerator = new RsaKeyPairGenerator();
-        keyPairGenerator.Init(keyGenerationParameters);
-        var keyPair = keyPairGenerator.GenerateKeyPair();
-
-        // Create X509Name from subject
-        var x509Name = new X509Name(subjectName);
-
-        // Create CSR
-        var pkcs10 = new Pkcs10CertificationRequest(
-            "SHA256WITHRSA",
-            x509Name,
-            keyPair.Public,
-            CreateAttributes(sans, ekus),
-            keyPair.Private
-        );
-
-        // Convert to PEM format
-        StringBuilder csrPemBuilder = new();
-        using (StringWriter stringWriter = new(csrPemBuilder))
-        {
-            PemWriter pemWriter = new(stringWriter);
-            pemWriter.WriteObject(pkcs10);
-        }
-
-        return new CsrData { CsrPem = csrPemBuilder.ToString(), PrivateKeyContext = keyPair };
+        return UnifiedCertService.CreateCSR(subjectName, sans, keylength, ekus, keyUsage);
     }
 
     public X509Certificate2 GetCertFromStoreBySubject(
@@ -112,7 +75,6 @@ public class MacCertStoreService : ICertStoreService
 
     public void InstallCertificate(string cert, CsrData csrData, bool localStore)
     {
-        // TODO: combine with Linux because same
         if (csrData.PrivateKeyContext is not AsymmetricCipherKeyPair keyPair)
         {
             throw new ArgumentException("Invalid CSR context for Linux certificate installation");
@@ -146,7 +108,6 @@ public class MacCertStoreService : ICertStoreService
 
     public void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore)
     {
-        // TODO: combine with Linux because same
         X509Store store = GetCertStore(localStore);
         AssertCanWriteToStore(localStore);
         store.Open(OpenFlags.ReadWrite);
@@ -175,55 +136,6 @@ public class MacCertStoreService : ICertStoreService
             StoreName.My,
             localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
         );
-    }
-
-    private static DerSet CreateAttributes(List<string> sans, List<string> ekus)
-    {
-        // TODO: combine with Linux because same
-        var attributes = new List<AttributePkcs>();
-
-        // Add Subject Alternative Names extension
-        if (sans.Any())
-        {
-            var generalNames = sans.Select(san => new GeneralName(GeneralName.DnsName, san))
-                .ToArray();
-
-            var subjectAlternativeNames = new GeneralNames(generalNames);
-            var extensionsGenerator = new X509ExtensionsGenerator();
-            extensionsGenerator.AddExtension(
-                X509Extensions.SubjectAlternativeName,
-                false,
-                subjectAlternativeNames
-            );
-
-            // Add EKUs if specified
-            if (ekus.Any())
-            {
-                var ekuOids = ekus.Select(oid => new DerObjectIdentifier(oid)).ToArray();
-                var extendedKeyUsage = new ExtendedKeyUsage(ekuOids);
-                extensionsGenerator.AddExtension(
-                    X509Extensions.ExtendedKeyUsage,
-                    false,
-                    extendedKeyUsage
-                );
-            }
-
-            // Add Key Usage
-            extensionsGenerator.AddExtension(
-                X509Extensions.KeyUsage,
-                true,
-                new KeyUsage(KeyUsage.DigitalSignature | KeyUsage.KeyEncipherment)
-            );
-
-            var extensions = extensionsGenerator.Generate();
-            var extensionRequest = new AttributePkcs(
-                PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
-                new DerSet(extensions)
-            );
-            attributes.Add(extensionRequest);
-        }
-
-        return new DerSet(attributes.ToArray());
     }
 
     private static void PrintCertificatesInStore(X509Store store)
