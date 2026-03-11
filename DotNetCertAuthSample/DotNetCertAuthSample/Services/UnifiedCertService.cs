@@ -130,6 +130,149 @@ public class UnifiedCertService
         return rsa;
     }
 
+    public static X509Certificate2 GetCertFromStoreBySubject(
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = ""
+    )
+    {
+        X509Store store = GetCertStore(localStore);
+        X509Certificate2? cert = null;
+        store.Open(OpenFlags.ReadOnly);
+        X509Certificate2Collection certs = store.Certificates.Find(
+            X509FindType.FindBySubjectName,
+            subjectName,
+            true
+        );
+        if (certs.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(templateName))
+            {
+                cert = certs
+                    .Find(X509FindType.FindByTemplateName, templateName, true)
+                    .FirstOrDefault();
+            }
+            else if (!string.IsNullOrWhiteSpace(issuerName))
+            {
+                cert = certs.Find(X509FindType.FindByIssuerName, issuerName, true).FirstOrDefault();
+            }
+            cert ??=
+                certs
+                    .OrderByDescending(x => x.NotAfter)
+                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                ?? certs.OrderByDescending(x => x.NotAfter).First();
+        }
+        else
+        {
+            List<X509Certificate2> matchingCertificates = new();
+            X509Certificate2Collection allStoreCertificates = store.Certificates;
+            foreach (
+                X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
+                    i.NotAfter
+                )
+            )
+            {
+                if (
+                    CheckCertificateTemplate(storeCert, templateName)
+                    && CheckCertificateIssuer(storeCert, issuerName)
+                    && storeCert.Subject.Contains(subjectName)
+                )
+                {
+                    matchingCertificates.Add(storeCert);
+                }
+            }
+            if (matchingCertificates.Count == 1)
+            {
+                cert = matchingCertificates[0];
+            }
+            else if (matchingCertificates.Count > 1)
+            {
+                cert =
+                    matchingCertificates
+                        .OrderByDescending(x => x.NotAfter)
+                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                    ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
+            }
+        }
+        if (cert == null)
+        {
+            throw new FileNotFoundException(
+                $"Could not find certificate for domain {subjectName} in {StoreString(localStore)}"
+            );
+        }
+        return cert;
+    }
+
+    public static X509Certificate2 GetCertFromStoreByThumbprint(string thumbprint)
+    {
+        X509Store store = GetCertStore(false);
+        X509Certificate2? cert = null;
+        store.Open(OpenFlags.ReadOnly);
+        X509Certificate2Collection certs = store.Certificates.Find(
+            X509FindType.FindByThumbprint,
+            thumbprint,
+            true
+        );
+        if (certs.Count > 0)
+        {
+            cert = certs[0];
+        }
+        return cert
+            ?? throw new FileNotFoundException(
+                $"Could not find certificate with thumbprint {thumbprint} in user store"
+            );
+    }
+
+    private static string StoreString(bool localStore)
+    {
+        if (localStore)
+        {
+            return "local store";
+        }
+        return "user store";
+    }
+
+    public static X509Store GetCertStore(bool localStore)
+    {
+        return new X509Store(
+            StoreName.My,
+            localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
+        );
+    }
+
+    private static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
+    {
+        if (string.IsNullOrWhiteSpace(templateName))
+        {
+            return true;
+        }
+        string? certTemplateName = GetCertificateTemplateName(cert);
+        return templateName.Equals(certTemplateName?.Trim());
+    }
+
+    private static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
+    {
+        if (string.IsNullOrWhiteSpace(issuerName))
+        {
+            return true;
+        }
+        return cert.Issuer.Contains(issuerName);
+    }
+
+    private static string? GetCertificateTemplateName(X509Certificate2 certificate)
+    {
+        foreach (var extension in certificate.Extensions)
+        {
+            if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
+            {
+                AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
+                return asnData.Format(true);
+            }
+        }
+        return null;
+    }
+
     private static DerSet CreateAttributes(
         List<string> sans,
         List<string> ekus,

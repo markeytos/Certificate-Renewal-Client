@@ -29,48 +29,17 @@ public class MacCertStoreService : ICertStoreService
         string templateName = ""
     )
     {
-        X509Store store = GetCertStore(localStore);
-        try
-        {
-            store.Open(OpenFlags.ReadOnly);
-            X509Certificate2? certificate = store
-                .Certificates.Find(X509FindType.FindBySubjectName, subjectName, validOnly: false)
-                .OfType<X509Certificate2>()
-                .FirstOrDefault(c =>
-                    c.Subject.Contains(subjectName, StringComparison.OrdinalIgnoreCase)
-                );
-            return certificate
-                ?? throw new Exception(
-                    $"Certificate with subject name '{subjectName}' not found in the store."
-                );
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error opening certificate store: {ex.Message}");
-            throw;
-        }
+        return UnifiedCertService.GetCertFromStoreBySubject(
+            subjectName,
+            localStore,
+            issuerName,
+            templateName
+        );
     }
 
     public X509Certificate2 GetCertFromStoreByThumbprint(string thumbprint)
     {
-        X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
-        try
-        {
-            store.Open(OpenFlags.ReadOnly);
-            X509Certificate2? certificate = store
-                .Certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false)
-                .OfType<X509Certificate2>()
-                .FirstOrDefault();
-            return certificate
-                ?? throw new Exception(
-                    $"Certificate with thumbprint '{thumbprint}' not found in the store."
-                );
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error opening certificate store: {ex.Message}");
-            throw;
-        }
+        return UnifiedCertService.GetCertFromStoreByThumbprint(thumbprint);
     }
 
     public void InstallCertificate(string cert, CsrData csrData, bool localStore)
@@ -108,7 +77,7 @@ public class MacCertStoreService : ICertStoreService
 
     public void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore)
     {
-        X509Store store = GetCertStore(localStore);
+        X509Store store = UnifiedCertService.GetCertStore(localStore);
         AssertCanWriteToStore(localStore);
         store.Open(OpenFlags.ReadWrite);
         store.Add(certificate);
@@ -128,14 +97,6 @@ public class MacCertStoreService : ICertStoreService
     private static bool IsRunningAsRoot()
     {
         return string.Equals(Environment.UserName, "root", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static X509Store GetCertStore(bool localStore)
-    {
-        return new X509Store(
-            StoreName.My,
-            localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
-        );
     }
 
     private static void PrintCertificatesInStore(X509Store store)

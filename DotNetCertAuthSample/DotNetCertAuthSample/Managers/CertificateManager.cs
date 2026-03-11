@@ -395,8 +395,8 @@ public class CertificateManager
                 TemplateID = values.TemplateID,
             };
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
-                values.Domain,
-                values.SubjectName,
+                values.Domain!,
+                values.SubjectName!,
                 localStore,
                 selectedCA,
                 values.Validity,
