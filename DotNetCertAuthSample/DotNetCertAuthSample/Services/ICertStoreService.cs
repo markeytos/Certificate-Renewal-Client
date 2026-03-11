@@ -23,7 +23,7 @@ public interface ICertStoreService
         List<X509KeyUsageFlags>? keyUsageFlags = null
     );
 
-    void InstallCertificate(string cert, CsrData csrData);
+    void InstallCertificate(string cert, CsrData csrData, bool localStore);
 
     void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore);
 }

@@ -6,12 +6,13 @@ public class MacSystemInfoService : ISystemInfoService
 {
     public string? GetComputerDistinguishedName(string computerName)
     {
-        throw new NotImplementedException("Cannot get computer distinguished name for macOS");
+        return null;
     }
 
     public string GetComputerSubjectName()
     {
-        throw new NotImplementedException("Cannot get computer subject name for macOS");
+        string computerName = Dns.GetHostName();
+        return GetFQDN(computerName);
     }
 
     public string GetFQDN(string computerName = "")

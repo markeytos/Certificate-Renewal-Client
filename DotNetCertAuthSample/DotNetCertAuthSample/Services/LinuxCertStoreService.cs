@@ -1,12 +1,15 @@
+#if LINUX
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using EZCAClient.Services;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Prng;
 using Org.BouncyCastle.OpenSsl;
 using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.Security;
@@ -15,19 +18,19 @@ using X509Certificate = Org.BouncyCastle.X509.X509Certificate;
 
 namespace DotNetCertAuthSample.Services;
 
-// ubuntu, debian
 public class LinuxCertStoreService : ICertStoreService
 {
-    private readonly string _certStorePath;
+    private readonly string _userStorePath;
+    private readonly string _machineStorePath = "/etc/ezca/certs";
 
     public LinuxCertStoreService()
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        _certStorePath = Path.Combine(homeDir, ".keytos", "ezca", "certs");
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _userStorePath = Path.Combine(homeDir, ".local", "share", "keytos", "certs");
 
-        if (!Directory.Exists(_certStorePath))
+        if (!Directory.Exists(_userStorePath))
         {
-            Directory.CreateDirectory(_certStorePath);
+            Directory.CreateDirectory(_userStorePath);
         }
     }
 
@@ -55,7 +58,6 @@ public class LinuxCertStoreService : ICertStoreService
             {
                 X509Certificate2 cert = X509CertificateLoader.LoadCertificateFromFile(certFile);
 
-                // Check if subject matches
                 if (
                     cert.Subject.Contains(subjectName, StringComparison.OrdinalIgnoreCase)
                     || cert.SubjectName.Name.Contains(
@@ -64,7 +66,6 @@ public class LinuxCertStoreService : ICertStoreService
                     )
                 )
                 {
-                    // Check issuer if specified
                     if (
                         !string.IsNullOrWhiteSpace(issuerName)
                         && !cert.Issuer.Contains(issuerName, StringComparison.OrdinalIgnoreCase)
@@ -147,19 +148,11 @@ public class LinuxCertStoreService : ICertStoreService
         List<X509KeyUsageFlags>? keyUsageFlags = null
     )
     {
-        // Generate RSA key pair using BouncyCastle
-        var randomGenerator = new Org.BouncyCastle.Crypto.Prng.CryptoApiRandomGenerator();
-        var random = new SecureRandom(randomGenerator);
-        var keyGenerationParameters = new KeyGenerationParameters(random, keylength);
-        var keyPairGenerator = new RsaKeyPairGenerator();
-        keyPairGenerator.Init(keyGenerationParameters);
-        var keyPair = keyPairGenerator.GenerateKeyPair();
-
-        // Create X509Name from subject
-        var x509Name = new X509Name(subjectName);
+        AsymmetricCipherKeyPair keyPair = GenerateKeyPair(keylength);
+        X509Name x509Name = new(subjectName);
 
         // Create CSR
-        var pkcs10 = new Pkcs10CertificationRequest(
+        Pkcs10CertificationRequest pkcs10 = new(
             "SHA256WITHRSA",
             x509Name,
             keyPair.Public,
@@ -168,7 +161,7 @@ public class LinuxCertStoreService : ICertStoreService
         );
 
         // Convert to PEM format
-        StringBuilder csrPemBuilder = new StringBuilder();
+        StringBuilder csrPemBuilder = new();
         using (var stringWriter = new StringWriter(csrPemBuilder))
         {
             var pemWriter = new PemWriter(stringWriter);
@@ -178,7 +171,7 @@ public class LinuxCertStoreService : ICertStoreService
         return new CsrData { CsrPem = csrPemBuilder.ToString(), PrivateKeyContext = keyPair };
     }
 
-    public void InstallCertificate(string cert, CsrData csrData)
+    public void InstallCertificate(string cert, CsrData csrData, bool localStore)
     {
         if (csrData.PrivateKeyContext is not AsymmetricCipherKeyPair keyPair)
         {
@@ -186,27 +179,14 @@ public class LinuxCertStoreService : ICertStoreService
         }
 
         // Parse the certificate
-        var certParser = new X509CertificateParser();
-        byte[] certBytes = Encoding.UTF8.GetBytes(cert);
-        X509Certificate bcCert = certParser.ReadCertificate(certBytes);
-
-        // Convert BouncyCastle certificate to X509Certificate2
-        var dotNetCert = new X509Certificate2(bcCert.GetEncoded());
+        X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
 
         // Convert private key to RSA
-        var rsaParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
-#pragma warning disable CA1416
-        RSA rsa = DotNetUtilities.ToRSA(rsaParams);
-#pragma warning restore CA1416
+        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
+        RSA rsa = ConvertToRSA(rsaParams);
 
         // Combine certificate with private key
-        var certWithKey = dotNetCert.CopyWithPrivateKey(rsa);
-
-        // Determine if this should be stored in local (machine) or user store
-        // For Linux, we'll use our custom file-based store
-        bool localStore = true; // Default to machine store
-
-        // Install the certificate
+        var certWithKey = certificate.CopyWithPrivateKey(rsa);
         InstallCertificateWithPrivateKey(certWithKey, localStore);
     }
 
@@ -232,33 +212,59 @@ public class LinuxCertStoreService : ICertStoreService
         File.WriteAllBytes(certPath, certBytes);
 
         // Set appropriate permissions on Linux
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        try
         {
-            try
-            {
-                // Set file permissions to 600 (owner read/write only)
-                var fileInfo = new UnixFileMode();
-                fileInfo = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-                File.SetUnixFileMode(certPath, fileInfo);
-            }
-            catch
-            {
-                // Ignore if setting permissions fails
-            }
+            // Set file permissions to 600 (owner read/write only)
+            UnixFileMode fileInfo = new();
+            fileInfo = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            File.SetUnixFileMode(certPath, fileInfo);
         }
+        catch (Exception e)
+        {
+            Console.WriteLine(
+                $"Warning: Failed to set file permissions on {certPath}. Exception: {e.Message}"
+            );
+        }
+    }
+
+    public static RSA ConvertToRSA(RsaPrivateCrtKeyParameters key)
+    {
+        RSAParameters rsaParams = new()
+        {
+            Modulus = key.Modulus.ToByteArrayUnsigned(),
+            Exponent = key.PublicExponent.ToByteArrayUnsigned(),
+            D = key.Exponent.ToByteArrayUnsigned(),
+            P = key.P.ToByteArrayUnsigned(),
+            Q = key.Q.ToByteArrayUnsigned(),
+            DP = key.DP.ToByteArrayUnsigned(),
+            DQ = key.DQ.ToByteArrayUnsigned(),
+            InverseQ = key.QInv.ToByteArrayUnsigned(),
+        };
+
+        RSA rsa = RSA.Create();
+        rsa.ImportParameters(rsaParams);
+        return rsa;
+    }
+
+    private static AsymmetricCipherKeyPair GenerateKeyPair(int keylength)
+    {
+        CryptoApiRandomGenerator randomGenerator = new();
+        SecureRandom random = new(randomGenerator);
+        KeyGenerationParameters keyGenerationParameters = new(random, keylength);
+        RsaKeyPairGenerator keyPairGenerator = new();
+        keyPairGenerator.Init(keyGenerationParameters);
+        return keyPairGenerator.GenerateKeyPair();
     }
 
     private string GetStorePath(bool localStore)
     {
         if (localStore)
         {
-            // Machine-wide store
-            return "/etc/ezca/certs";
+            return _machineStorePath;
         }
         else
         {
-            // User store
-            return _certStorePath;
+            return _userStorePath;
         }
     }
 
@@ -318,3 +324,4 @@ public class LinuxCertStoreService : ICertStoreService
         return new DerSet(attributes.ToArray());
     }
 }
+#endif

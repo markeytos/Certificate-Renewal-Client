@@ -222,7 +222,7 @@ public class CertificateManager
             Console.WriteLine($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
-            _certStoreService.InstallCertificate(createdCert, csrData);
+            _certStoreService.InstallCertificate(createdCert, csrData, values.LocalCertStore);
             _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
             Console.WriteLine($"certificate {values.Domain} was renewed successfully");
             if (values.RDPCert)
@@ -254,6 +254,14 @@ public class CertificateManager
                 throw new ArgumentException(
                     "If certificate will be used for RDP it must be stored in the local store"
                 );
+            }
+            if (values.RDPCert && !OperatingSystem.IsWindows())
+            {
+                throw new ArgumentException("RDP is only supported on Windows");
+            }
+            if (values.LocalCertStore && OperatingSystem.IsMacOS())
+            {
+                AssertCanWriteToStore(values.LocalCertStore);
             }
             if (!IsGuid(values.caID))
             {
@@ -312,6 +320,21 @@ public class CertificateManager
         return 0;
     }
 
+    private static void AssertCanWriteToStore(bool localStore)
+    {
+        if (localStore && !IsRunningAsRoot())
+        {
+            throw new Exception(
+                "Insufficient permissions to write to the local machine store. Please run the application with elevated permissions (i.e. 'sudo')"
+            );
+        }
+    }
+
+    private static bool IsRunningAsRoot()
+    {
+        return string.Equals(Environment.UserName, "root", StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task<int> CreateDCCertAsync(CreateDCCertificate values)
     {
         if (_logger == null)
@@ -347,7 +370,7 @@ public class CertificateManager
                     );
                 }
             }
-            if (values.EKUs == null || values.EKUs.Any() == false)
+            if (values.EKUs == null || values.EKUs.Count == 0)
             {
                 values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
             }
@@ -580,12 +603,13 @@ public class CertificateManager
         var cmsResponse = new EnvelopedCms();
         cmsResponse.Decode(signedResponse.ContentInfo.Content);
         cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
-        X509Certificate2Collection certCollection = new X509Certificate2Collection();
+        X509Certificate2Collection certCollection = new();
         certCollection.Import(cmsResponse.ContentInfo.Content);
-        X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).Last();
-#pragma warning disable CA1416
-        RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
-#pragma warning restore CA1416
+        X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).First();
+        Console.WriteLine($"Received certificate with subject: {cert.Subject}");
+        Console.WriteLine($"Certificate is valid from {cert.NotBefore} to {cert.NotAfter}");
+        Console.WriteLine($"Certificate chain length: {certCollection.Count}");
+        RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         _certStoreService.InstallCertificateWithPrivateKey(cert, localStore);
         return 0;
@@ -627,12 +651,31 @@ public class CertificateManager
             keyPair.Private
         );
         X509Certificate bouncyCastleCert = certGen.Generate(signatureFactory);
-        X509Certificate2 cert = new X509Certificate2(bouncyCastleCert.GetEncoded());
-#pragma warning disable CA1416
-        RSA rsaPrivateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)keyPair.Private);
-#pragma warning restore CA1416
+        X509Certificate2 cert = X509CertificateLoader.LoadCertificate(
+            bouncyCastleCert.GetEncoded()
+        );
+        RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)keyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         return cert;
+    }
+
+    public static RSA ConvertToRSA(RsaPrivateCrtKeyParameters key)
+    {
+        RSAParameters rsaParams = new()
+        {
+            Modulus = key.Modulus.ToByteArrayUnsigned(),
+            Exponent = key.PublicExponent.ToByteArrayUnsigned(),
+            D = key.Exponent.ToByteArrayUnsigned(),
+            P = key.P.ToByteArrayUnsigned(),
+            Q = key.Q.ToByteArrayUnsigned(),
+            DP = key.DP.ToByteArrayUnsigned(),
+            DQ = key.DQ.ToByteArrayUnsigned(),
+            InverseQ = key.QInv.ToByteArrayUnsigned(),
+        };
+
+        RSA rsa = RSA.Create();
+        rsa.ImportParameters(rsaParams);
+        return rsa;
     }
 
     private Pkcs10CertificationRequest CreateCSRForScep(
@@ -668,13 +711,13 @@ public class CertificateManager
         extensions.AddExtension(
             X509Extensions.KeyUsage,
             true,
-            (new KeyUsage(KeyUsage.KeyEncipherment | KeyUsage.DigitalSignature)).ToAsn1Object()
+            new KeyUsage(KeyUsage.KeyEncipherment | KeyUsage.DigitalSignature).ToAsn1Object()
         );
-        AttributePkcs extensionRequest = new AttributePkcs(
+        AttributePkcs extensionRequest = new(
             PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
             new DerSet(extensions.Generate())
         );
-        Pkcs10CertificationRequest request = new Pkcs10CertificationRequest(
+        Pkcs10CertificationRequest request = new(
             "SHA256WITHRSA",
             new X509Name(values.SubjectName),
             rsaKeyPair.Public,
@@ -746,11 +789,6 @@ public class CertificateManager
     private string GetComputerSubjectName()
     {
         return _systemInfoService.GetComputerSubjectName();
-    }
-
-    private string? GetComputerDistinguishedName(string computerName)
-    {
-        return _systemInfoService.GetComputerDistinguishedName(computerName);
     }
 
     private string GetFQDN(string computerName = "")
@@ -869,12 +907,13 @@ public class CertificateManager
             keyProvider
         );
         string csr = csrData.CsrPem;
-        X509Certificate2? windowsCert;
+        X509Certificate2? cert;
         if (dcCertificate)
         {
-            _logger.LogInformation($"Getting Domain Controller certificate for {domain}");
-            Console.WriteLine($"Getting Domain Controller certificate for {domain}");
-            windowsCert = await ezcaClient.RequestDCCertificateAsync(
+            string message = $"Getting Domain Controller certificate for {domain}";
+            _logger.LogInformation(message);
+            Console.WriteLine(message);
+            cert = await ezcaClient.RequestDCCertificateAsync(
                 selectedCA,
                 csr,
                 subjectName,
@@ -886,39 +925,28 @@ public class CertificateManager
         }
         else
         {
-            _logger.LogInformation($"Getting Windows certificate for {domain}");
-            Console.WriteLine($"Getting Windows certificate for {domain}");
-            windowsCert = await ezcaClient.RequestCertificateAsync(
-                selectedCA,
-                csr,
-                domain,
-                validity
-            );
+            string message = $"Getting certificate for {domain}";
+            _logger.LogInformation(message);
+            Console.WriteLine(message);
+            cert = await ezcaClient.RequestCertificateAsync(selectedCA, csr, domain, validity);
         }
 
-        if (windowsCert != null)
+        if (cert != null)
         {
-            _logger.LogInformation(
-                $"Installing Windows Certificate for "
-                    + $"{domain} with thumbprint {windowsCert.Thumbprint}"
-            );
-            Console.WriteLine(
-                $"Installing Windows Certificate for "
-                    + $"{domain} with thumbprint {windowsCert.Thumbprint}"
-            );
+            string message =
+                $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}";
+            _logger.LogInformation(message);
+            Console.WriteLine(message);
             _certStoreService.InstallCertificate(
-                CryptoStaticService.ExportToPEM(windowsCert),
-                csrData
+                CryptoStaticService.ExportToPEM(cert),
+                csrData,
+                localStore
             );
-            _logger.LogInformation(
-                $"Successfully created certificate for "
-                    + $"{domain} with thumbprint {windowsCert.Thumbprint}"
-            );
-            Console.WriteLine(
-                $"Successfully created certificate for "
-                    + $"{domain} with thumbprint {windowsCert.Thumbprint}"
-            );
-            return windowsCert;
+            message =
+                $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}";
+            _logger.LogInformation(message);
+            Console.WriteLine(message);
+            return cert;
         }
         throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
     }
@@ -983,9 +1011,7 @@ public class CertificateManager
             // EventLog is Windows-only
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-#pragma warning disable CA1416
                 builder.AddEventLog();
-#pragma warning restore CA1416
             }
             else
             {

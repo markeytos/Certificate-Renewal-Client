@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using EZCAClient.Services;
@@ -6,6 +7,7 @@ using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.OpenSsl;
 using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.Security;
@@ -24,6 +26,8 @@ public class MacCertStoreService : ICertStoreService
         List<X509KeyUsageFlags>? keyUsageFlags = null
     )
     {
+        // TODO: combine with Linux because same
+
         // Generate RSA key pair using BouncyCastle
         var randomGenerator = new Org.BouncyCastle.Crypto.Prng.CryptoApiRandomGenerator();
         var random = new SecureRandom(randomGenerator);
@@ -45,10 +49,10 @@ public class MacCertStoreService : ICertStoreService
         );
 
         // Convert to PEM format
-        StringBuilder csrPemBuilder = new StringBuilder();
-        using (var stringWriter = new StringWriter(csrPemBuilder))
+        StringBuilder csrPemBuilder = new();
+        using (StringWriter stringWriter = new(csrPemBuilder))
         {
-            var pemWriter = new PemWriter(stringWriter);
+            PemWriter pemWriter = new(stringWriter);
             pemWriter.WriteObject(pkcs10);
         }
 
@@ -106,19 +110,43 @@ public class MacCertStoreService : ICertStoreService
         }
     }
 
-    public void InstallCertificate(string cert, CsrData csrData)
+    public void InstallCertificate(string cert, CsrData csrData, bool localStore)
     {
+        // TODO: combine with Linux because same
+        if (csrData.PrivateKeyContext is not AsymmetricCipherKeyPair keyPair)
+        {
+            throw new ArgumentException("Invalid CSR context for Linux certificate installation");
+        }
         X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
-        bool localStore = true;
-        X509Store store = GetCertStore(localStore);
-        AssertCanWriteToStore(localStore);
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(certificate);
-        store.Close();
+        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
+        RSA rsa = ConvertToRSA(rsaParams);
+
+        var certWithKey = certificate.CopyWithPrivateKey(rsa);
+        InstallCertificateWithPrivateKey(certWithKey, localStore);
+    }
+
+    public static RSA ConvertToRSA(RsaPrivateCrtKeyParameters key)
+    {
+        RSAParameters rsaParams = new()
+        {
+            Modulus = key.Modulus.ToByteArrayUnsigned(),
+            Exponent = key.PublicExponent.ToByteArrayUnsigned(),
+            D = key.Exponent.ToByteArrayUnsigned(),
+            P = key.P.ToByteArrayUnsigned(),
+            Q = key.Q.ToByteArrayUnsigned(),
+            DP = key.DP.ToByteArrayUnsigned(),
+            DQ = key.DQ.ToByteArrayUnsigned(),
+            InverseQ = key.QInv.ToByteArrayUnsigned(),
+        };
+
+        RSA rsa = RSA.Create();
+        rsa.ImportParameters(rsaParams);
+        return rsa;
     }
 
     public void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore)
     {
+        // TODO: combine with Linux because same
         X509Store store = GetCertStore(localStore);
         AssertCanWriteToStore(localStore);
         store.Open(OpenFlags.ReadWrite);
@@ -143,11 +171,15 @@ public class MacCertStoreService : ICertStoreService
 
     private static X509Store GetCertStore(bool localStore)
     {
-        return new X509Store(StoreName.My, localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
+        return new X509Store(
+            StoreName.My,
+            localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
+        );
     }
 
     private static DerSet CreateAttributes(List<string> sans, List<string> ekus)
     {
+        // TODO: combine with Linux because same
         var attributes = new List<AttributePkcs>();
 
         // Add Subject Alternative Names extension
