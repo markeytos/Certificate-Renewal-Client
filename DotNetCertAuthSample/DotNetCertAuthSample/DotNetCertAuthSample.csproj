@@ -8,10 +8,6 @@
     <Version>1.2.0</Version>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
   <ItemGroup Condition="$([MSBuild]::IsOsPlatform('Windows'))">
     <COMReference Include="CERTENROLLLib">
       <WrapperTool>tlbimp</WrapperTool>
