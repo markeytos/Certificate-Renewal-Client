@@ -12,7 +12,7 @@ env:
   GH_TOKEN: ${{ github.token }}
 jobs:
 
-  build:
+  build-windows:
     runs-on: windows-latest  
     steps:
       - name: Checkout Code
@@ -34,3 +34,86 @@ jobs:
         run: .\DotNetCertAuthSample\build.ps1
       - name: Upload Artifacts
         run: gh release upload ezca-client-v${{ inputs.version }} .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0\win-x64\publish\EZCACertManager.exe
+
+  build-macos:
+    runs-on: macos-latest
+    env:
+      NOTARIZE_PASSWORD: "${{ secrets.MAC_DEV_PASSWORD }}"
+      MAC_CERT_PASSWORD: "${{ secrets.MAC_CERT_PASSWORD }}"
+      KEYCHAIN_PASSWORD: "${{ secrets.MAC_KEYCHAIN_PASSWORD }}"
+      MAC_CERT_BASE64: "${{ secrets.MAC_CERT_BASE64 }}"
+      TEAM_ID: ""
+      APPLE_ID: ""
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create Keychain and Import Signing Certificate
+        run: |
+          export MAC_CERT_BASE64="$MAC_CERT_BASE64"
+          export MAC_CERT_PASSWORD="$MAC_CERT_PASSWORD"
+          export KEYCHAIN_PASSWORD="$KEYCHAIN_PASSWORD"
+          export TEAM_ID="$TEAM_ID"
+          export APPLE_ID="$APPLE_ID"
+          chmod +x ./DotNetCertAuthSample/import-macos-cert.sh
+          ./DotNetCertAuthSample/import-macos-cert.sh
+
+      - name: Build, Sign, and Verify MacOS App
+        run: |
+          export NOTARIZE_PASSWORD="$NOTARIZE_PASSWORD"
+          export TEAM_ID="$TEAM_ID"
+          export APPLE_ID="$APPLE_ID"
+          export SIGNING_IDENTITY="Developer ID Application: Keytos LLC ($TEAM_ID)"
+          chmod +x ./DotNetCertAuthSample/build-macos.sh
+          ./DotNetCertAuthSample/build-macos.sh
+
+      - name: Upload Artifacts
+        run: gh release upload ezca-client-v${{ inputs.version }} ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager
+
+  build-linux:
+    name: Build `.deb` for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - name: Install other utilities
+        run: sudo apt-get install -y dpkg moreutils
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: create deb
+        working-directory: ./DotnetCertAuthSample
+        run: VERSION="${{ inputs.version }}"  make -C .
+
+      - name: rename deb
+        working-directory: ./DotnetCertAuthSample
+        run: mv ./EZCACertManager.deb ./EZCACertManager-${{ matrix.os }}.deb
+
+      - name: Upload Artifacts
+        run: gh release upload ezca-client-v${{ inputs.version }} ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/linux-osx64/publish/EZCACertManager
+
+
+
+
+
+
+
+
+
+
+
+
