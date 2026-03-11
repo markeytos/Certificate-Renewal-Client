@@ -635,14 +635,10 @@ public class CertificateManager
         var attributes = signedResponse
             .SignerInfos.Cast<SignerInfo>()
             .SelectMany(si => si.SignedAttributes.Cast<CryptographicAttributeObject>());
-        var recipientNonce = attributes.FirstOrDefault(a =>
-            a.Oid.Value == "2.16.840.1.113733.1.9.6"
-        );
-        if (recipientNonce == null)
-        {
-            throw new Exception("Recipient nonce not found in response");
-        }
-        if (!nonce.SequenceEqual(recipientNonce.Values[0].RawData[2..]))
+        var recipientNonce =
+            attributes.FirstOrDefault(a => a.Oid.Value == "2.16.840.1.113733.1.9.6")
+            ?? throw new Exception("Recipient nonce not found in response");
+        if (!nonce.SequenceEqual(recipientNonce.Values[0].RawData.AsSpan()[2..]))
         {
             throw new Exception("Recipient nonce does not match");
         }
@@ -650,7 +646,7 @@ public class CertificateManager
         var cmsResponse = new EnvelopedCms();
         cmsResponse.Decode(signedResponse.ContentInfo.Content);
         cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
-        X509Certificate2Collection certCollection = new();
+        X509Certificate2Collection certCollection = [];
         certCollection.Import(cmsResponse.ContentInfo.Content);
         X509Certificate2? cert = certCollection
             .OrderBy(x => x.NotBefore)
@@ -659,14 +655,6 @@ public class CertificateManager
         {
             Console.WriteLine("No end-entity certificate found in the response");
             return 1;
-        }
-        Console.WriteLine($"Received certificate with subject: {cert.Subject}");
-        Console.WriteLine($"Certificate is valid from {cert.NotBefore} to {cert.NotAfter}");
-        Console.WriteLine($"Certificate chain length: {certCollection.Count}");
-        foreach (var c in certCollection)
-        {
-            Console.WriteLine($"Certificate in chain: {c.Subject}");
-            Console.WriteLine($"Certificate is valid from {c.NotBefore} to {cert.NotAfter}");
         }
         RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
@@ -750,14 +738,14 @@ public class CertificateManager
         AsymmetricCipherKeyPair rsaKeyPair
     )
     {
-        AttributePkcs scepPassword = new AttributePkcs(
+        AttributePkcs scepPassword = new(
             PkcsObjectIdentifiers.Pkcs9AtChallengePassword,
             new DerSet(new DerPrintableString(challengePassword))
         );
-        X509ExtensionsGenerator extensions = new X509ExtensionsGenerator();
+        X509ExtensionsGenerator extensions = new();
         if (!string.IsNullOrWhiteSpace(values.SubjectAltNames))
         {
-            GeneralNames subjectAlternateNames = new GeneralNames(
+            GeneralNames subjectAlternateNames = new(
                 values
                     .SubjectAltNames.Split(',')
                     .Select(dnsName => new GeneralName(GeneralName.DnsName, dnsName))
@@ -871,7 +859,7 @@ public class CertificateManager
         try
         {
             ValidateRegisterArgModel(values);
-            IEZCAClient ezcaClient = new EZCAClientClass(new HttpClient(), _logger, values.url);
+            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             _logger.LogInformation("Getting available CAs");
             Console.WriteLine("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);

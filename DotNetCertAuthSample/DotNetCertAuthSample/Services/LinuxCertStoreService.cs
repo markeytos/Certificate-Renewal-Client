@@ -69,7 +69,6 @@ public class LinuxCertStoreService : ICertStoreService
             }
             catch (Exception e)
             {
-                // Skip invalid certificates
                 Console.WriteLine(
                     $"Warning: Failed to load certificate from {certFile}. Exception: {e.Message}"
                 );
