@@ -109,7 +109,7 @@ public class LinuxCertStoreService : ICertStoreService
         bool localStore,
         List<string> ekus,
         string keyProvider = "",
-        X509KeyUsage? keyUsage = null
+        X509KeyUsageFlags? keyUsage = null
     )
     {
         return UnifiedCertService.CreateCSR(subjectName, sans, keylength, ekus, keyUsage);

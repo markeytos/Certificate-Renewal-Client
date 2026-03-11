@@ -22,7 +22,7 @@ public class UnifiedCertService
         List<string> sans,
         int keylength,
         List<string> ekus,
-        X509KeyUsage? keyUsage = null
+        X509KeyUsageFlags? keyUsage = null
     )
     {
         CryptoApiRandomGenerator randomGenerator = new();
@@ -34,8 +34,7 @@ public class UnifiedCertService
 
         X509Name x509Name = new(subjectName);
 
-        X509KeyUsage usage =
-            keyUsage ?? new(X509KeyUsage.DigitalSignature | X509KeyUsage.KeyEncipherment);
+        X509KeyUsage usage = ConvertKeyUsages(keyUsage);
 
         Pkcs10CertificationRequest pkcs10 = new(
             "SHA256WITHRSA",
@@ -53,6 +52,53 @@ public class UnifiedCertService
         }
 
         return new CsrData { CsrPem = csrPemBuilder.ToString(), PrivateKeyContext = keyPair };
+    }
+
+    private static X509KeyUsage ConvertKeyUsages(X509KeyUsageFlags? keyUsage)
+    {
+        if (keyUsage is null)
+        {
+            return new(X509KeyUsage.DigitalSignature | X509KeyUsage.KeyEncipherment);
+        }
+        int bitMask = 0;
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.DigitalSignature))
+        {
+            bitMask |= X509KeyUsage.DigitalSignature;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.KeyEncipherment))
+        {
+            bitMask |= X509KeyUsage.KeyEncipherment;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.KeyAgreement))
+        {
+            bitMask |= X509KeyUsage.KeyAgreement;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.DataEncipherment))
+        {
+            bitMask |= X509KeyUsage.DataEncipherment;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.KeyCertSign))
+        {
+            bitMask |= X509KeyUsage.KeyCertSign;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.CrlSign))
+        {
+            bitMask |= X509KeyUsage.CrlSign;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.EncipherOnly))
+        {
+            bitMask |= X509KeyUsage.EncipherOnly;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.DecipherOnly))
+        {
+            bitMask |= X509KeyUsage.DecipherOnly;
+        }
+        if (keyUsage.Value.HasFlag(X509KeyUsageFlags.NonRepudiation))
+        {
+            bitMask |= X509KeyUsage.NonRepudiation;
+        }
+
+        return new(bitMask);
     }
 
     public static AsymmetricCipherKeyPair GenerateKeyPair(int keylength)
@@ -130,4 +176,3 @@ public class UnifiedCertService
         return new DerSet(attributes.ToArray());
     }
 }
-

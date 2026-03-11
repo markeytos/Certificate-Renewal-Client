@@ -16,10 +16,10 @@ public class MacCertStoreService : ICertStoreService
         bool localStore,
         List<string> ekus,
         string keyProvider = "",
-        X509KeyUsage? keyUsage = null
+        X509KeyUsageFlags? keyUsages = null
     )
     {
-        return UnifiedCertService.CreateCSR(subjectName, sans, keylength, ekus, keyUsage);
+        return UnifiedCertService.CreateCSR(subjectName, sans, keylength, ekus, keyUsages);
     }
 
     public X509Certificate2 GetCertFromStoreBySubject(
