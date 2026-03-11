@@ -1,5 +1,4 @@
-﻿using System.Net;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -178,6 +177,7 @@ public class CertificateManager
                     "If certificate will be used for RDP it must be stored in the local store"
                 );
             }
+            AssertLocalStoreProperties(values.LocalCertStore);
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -259,10 +259,7 @@ public class CertificateManager
             {
                 throw new ArgumentException("RDP is only supported on Windows");
             }
-            if (values.LocalCertStore && OperatingSystem.IsMacOS())
-            {
-                AssertCanWriteToStore(values.LocalCertStore);
-            }
+            AssertLocalStoreProperties(values.LocalCertStore);
             if (!IsGuid(values.caID))
             {
                 throw new ArgumentException("Please enter a valid CA ID Guid");
@@ -322,10 +319,25 @@ public class CertificateManager
 
     private static void AssertCanWriteToStore(bool localStore)
     {
-        if (localStore && !IsRunningAsRoot())
+        if (localStore && !IsRunningAsRoot() && OperatingSystem.IsLinux())
+        {
+            string message = "To write to the local store, run the CLI with 'sudo -E'";
+            throw new Exception(message);
+        }
+        if (localStore && !IsRunningAsRoot() && OperatingSystem.IsMacOS())
+        {
+            string message = "To write to the local store, run the CLI with 'sudo'";
+            throw new Exception(message);
+        }
+    }
+
+    private static void AssertPreservedMsal()
+    {
+        string? dbus = Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS");
+        if (string.IsNullOrWhiteSpace(dbus))
         {
             throw new Exception(
-                "Insufficient permissions to write to the local machine store. Please run the application with elevated permissions (i.e. 'sudo')"
+                "Must run command with 'sudo -E' to allow linux access to azure credentials"
             );
         }
     }
@@ -343,6 +355,8 @@ public class CertificateManager
         }
         try
         {
+            bool localStore = true;
+            AssertLocalStoreProperties(localStore);
             if (!IsGuid(values.caID))
             {
                 throw new ArgumentException("Please enter a valid CA ID Guid");
@@ -404,7 +418,7 @@ public class CertificateManager
             X509Certificate2 createdCertificate = await CreateCertificateAsync(
                 values.Domain,
                 values.SubjectName,
-                true,
+                localStore,
                 selectedCA,
                 values.Validity,
                 ezcaClient,
@@ -433,6 +447,7 @@ public class CertificateManager
         }
         try
         {
+            AssertLocalStoreProperties(values.LocalCertStore);
             if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
             {
                 values.SubjectAltNames = GetFQDN();
@@ -493,6 +508,18 @@ public class CertificateManager
             _logger.LogError(ex, "Error creating SCEP certificate");
             Console.WriteLine("Error creating certificate: " + ex.Message);
             return 1;
+        }
+    }
+
+    private static void AssertLocalStoreProperties(bool localStore)
+    {
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            AssertCanWriteToStore(localStore);
+        }
+        if (localStore && OperatingSystem.IsLinux())
+        {
+            AssertPreservedMsal();
         }
     }
 
@@ -605,14 +632,33 @@ public class CertificateManager
         cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
         X509Certificate2Collection certCollection = new();
         certCollection.Import(cmsResponse.ContentInfo.Content);
-        X509Certificate2 cert = certCollection.OrderBy(x => x.NotBefore).First();
+        X509Certificate2? cert = certCollection
+            .OrderBy(x => x.NotBefore)
+            .LastOrDefault(x => !IsCACertificate(x));
+        if (cert == null)
+        {
+            Console.WriteLine("No end-entity certificate found in the response");
+            return 1;
+        }
         Console.WriteLine($"Received certificate with subject: {cert.Subject}");
         Console.WriteLine($"Certificate is valid from {cert.NotBefore} to {cert.NotAfter}");
         Console.WriteLine($"Certificate chain length: {certCollection.Count}");
+        foreach (var c in certCollection)
+        {
+            Console.WriteLine($"Certificate in chain: {c.Subject}");
+            Console.WriteLine($"Certificate is valid from {c.NotBefore} to {cert.NotAfter}");
+        }
         RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         _certStoreService.InstallCertificateWithPrivateKey(cert, localStore);
         return 0;
+    }
+
+    private static bool IsCACertificate(X509Certificate2 cert)
+    {
+        var basicConstraints = (X509BasicConstraintsExtension?)cert.Extensions["2.5.29.19"];
+        bool isCA = basicConstraints != null && basicConstraints.CertificateAuthority;
+        return isCA;
     }
 
     private static X509Certificate2 GenerateSelfSignedCertificate(

@@ -1,5 +1,4 @@
-﻿using System.Net;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using CommandLine;
 using DotNetCertAuthSample.Managers;
 using DotNetCertAuthSample.Models;
@@ -27,13 +26,8 @@ public class Program
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-#if LINUX
             certStoreService = new LinuxCertStoreService();
             systemInfoService = new LinuxSystemInfoService();
-#else
-            Console.WriteLine("Linux-specific services not available");
-            return 1;
-#endif
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {

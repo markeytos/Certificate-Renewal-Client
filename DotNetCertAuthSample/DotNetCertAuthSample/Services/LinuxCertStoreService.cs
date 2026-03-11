@@ -1,4 +1,3 @@
-#if LINUX
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -21,17 +20,15 @@ namespace DotNetCertAuthSample.Services;
 public class LinuxCertStoreService : ICertStoreService
 {
     private readonly string _userStorePath;
-    private readonly string _machineStorePath = "/etc/ezca/certs";
+    private readonly string _machineStorePath = "/etc/keytos/certs";
+    private readonly string _certEnding = "pfx";
 
     public LinuxCertStoreService()
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _userStorePath = Path.Combine(homeDir, ".local", "share", "keytos", "certs");
 
-        if (!Directory.Exists(_userStorePath))
-        {
-            Directory.CreateDirectory(_userStorePath);
-        }
+        CreateDirectoryIfNotExists(_userStorePath);
     }
 
     public X509Certificate2 GetCertFromStoreBySubject(
@@ -52,11 +49,14 @@ public class LinuxCertStoreService : ICertStoreService
 
         List<X509Certificate2> matchingCerts = [];
 
-        foreach (string certFile in Directory.GetFiles(storePath, "*.pem"))
+        foreach (string certFile in Directory.GetFiles(storePath, $"*.{_certEnding}"))
         {
             try
             {
-                X509Certificate2 cert = X509CertificateLoader.LoadCertificateFromFile(certFile);
+                X509Certificate2 cert = X509CertificateLoader.LoadPkcs12FromFile(
+                    certFile,
+                    "password"
+                );
 
                 if (
                     cert.Subject.Contains(subjectName, StringComparison.OrdinalIgnoreCase)
@@ -77,9 +77,12 @@ public class LinuxCertStoreService : ICertStoreService
                     matchingCerts.Add(cert);
                 }
             }
-            catch
+            catch (Exception e)
             {
                 // Skip invalid certificates
+                Console.WriteLine(
+                    $"Warning: Failed to load certificate from {certFile}. Exception: {e.Message}"
+                );
                 continue;
             }
         }
@@ -104,34 +107,6 @@ public class LinuxCertStoreService : ICertStoreService
             if (cert is not null)
             {
                 return cert;
-            }
-        }
-
-        return null;
-    }
-
-    private X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint, bool localStore)
-    {
-        string storePath = GetStorePath(localStore);
-
-        if (!Directory.Exists(storePath))
-        {
-            return null;
-        }
-
-        foreach (string certFile in Directory.GetFiles(storePath, "*.pem"))
-        {
-            try
-            {
-                X509Certificate2 cert = X509CertificateLoader.LoadCertificateFromFile(certFile);
-                if (cert.Thumbprint.Equals(thumbprint, StringComparison.OrdinalIgnoreCase))
-                {
-                    return cert;
-                }
-            }
-            catch
-            {
-                continue;
             }
         }
 
@@ -192,32 +167,29 @@ public class LinuxCertStoreService : ICertStoreService
 
     public void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore)
     {
-        string storePath = GetStorePath(localStore);
-
-        // Create directory if it doesn't exist
-        if (!Directory.Exists(storePath))
+        if (!certificate.HasPrivateKey)
         {
-            Directory.CreateDirectory(storePath);
+            throw new ArgumentException("Certificate must have a private key for installation");
         }
 
-        // Generate filename from certificate subject and thumbprint
-        string filename =
-            SanitizeFilename(certificate.Subject) + "_" + certificate.Thumbprint + ".pem";
+        string storePath = GetStorePath(localStore);
+        CreateDirectoryIfNotExists(storePath);
+
+        string filename = GetFileNameFromCertificate(certificate);
         string certPath = Path.Combine(storePath, filename);
 
-        // Export certificate with private key
-        byte[] certBytes = certificate.Export(X509ContentType.Pfx);
+        string password = "password";
+        byte[] certBytes = certificate.Export(X509ContentType.Pfx, password);
 
-        // Save as PFX file
         File.WriteAllBytes(certPath, certBytes);
 
-        // Set appropriate permissions on Linux
         try
         {
-            // Set file permissions to 600 (owner read/write only)
             UnixFileMode fileInfo = new();
             fileInfo = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+#pragma warning disable CA1416 // Validate platform compatibility
             File.SetUnixFileMode(certPath, fileInfo);
+#pragma warning restore CA1416 // Validate platform compatibility
         }
         catch (Exception e)
         {
@@ -225,6 +197,11 @@ public class LinuxCertStoreService : ICertStoreService
                 $"Warning: Failed to set file permissions on {certPath}. Exception: {e.Message}"
             );
         }
+    }
+
+    private string GetFileNameFromCertificate(X509Certificate2 certificate)
+    {
+        return $"{SanitizeFilename(certificate.Subject)}_{certificate.Thumbprint}.{_certEnding}";
     }
 
     public static RSA ConvertToRSA(RsaPrivateCrtKeyParameters key)
@@ -244,6 +221,34 @@ public class LinuxCertStoreService : ICertStoreService
         RSA rsa = RSA.Create();
         rsa.ImportParameters(rsaParams);
         return rsa;
+    }
+
+    private X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint, bool localStore)
+    {
+        string storePath = GetStorePath(localStore);
+
+        if (!Directory.Exists(storePath))
+        {
+            return null;
+        }
+
+        foreach (string certFile in Directory.GetFiles(storePath, $"*.{_certEnding}"))
+        {
+            try
+            {
+                X509Certificate2 cert = X509CertificateLoader.LoadCertificateFromFile(certFile);
+                if (cert.Thumbprint.Equals(thumbprint, StringComparison.OrdinalIgnoreCase))
+                {
+                    return cert;
+                }
+            }
+            catch
+            {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     private static AsymmetricCipherKeyPair GenerateKeyPair(int keylength)
@@ -270,10 +275,9 @@ public class LinuxCertStoreService : ICertStoreService
 
     private static string SanitizeFilename(string filename)
     {
-        // Remove invalid filename characters
         var invalidChars = Path.GetInvalidFileNameChars();
         var sanitized = new string(filename.Where(c => !invalidChars.Contains(c)).ToArray());
-        return sanitized.Replace(" ", "_").Replace(",", "");
+        return sanitized.Replace(" ", "_").Replace(",", "").Replace("CN=", "");
     }
 
     private static DerSet CreateAttributes(List<string> sans, List<string> ekus)
@@ -323,5 +327,12 @@ public class LinuxCertStoreService : ICertStoreService
 
         return new DerSet(attributes.ToArray());
     }
+
+    private static void CreateDirectoryIfNotExists(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+    }
 }
-#endif
