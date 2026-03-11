@@ -27,12 +27,12 @@ public class Program
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             certStoreService = new LinuxCertStoreService();
-            systemInfoService = new LinuxSystemInfoService();
+            systemInfoService = new UnifiedSystemInfoService();
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             certStoreService = new MacCertStoreService();
-            systemInfoService = new MacSystemInfoService();
+            systemInfoService = new UnifiedSystemInfoService();
         }
         else
         {

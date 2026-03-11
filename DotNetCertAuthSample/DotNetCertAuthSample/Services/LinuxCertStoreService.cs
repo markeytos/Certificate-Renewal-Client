@@ -167,7 +167,7 @@ public class LinuxCertStoreService : ICertStoreService
 
     private string GetFileNameFromCertificate(X509Certificate2 certificate)
     {
-        return $"{SanitizeFilename(certificate.Subject)}_{certificate.Thumbprint}.{_certEnding}";
+        return $"{certificate.Thumbprint}.{_certEnding}";
     }
 
     private X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint, bool localStore)
@@ -201,13 +201,6 @@ public class LinuxCertStoreService : ICertStoreService
     private string GetStorePath(bool localStore)
     {
         return localStore ? _machineStorePath : _userStorePath;
-    }
-
-    private static string SanitizeFilename(string filename)
-    {
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var sanitized = new string(filename.Where(c => !invalidChars.Contains(c)).ToArray());
-        return sanitized.Replace(" ", "_").Replace(",", "").Replace("CN=", "");
     }
 
     private static void CreateDirectoryIfNotExists(string path)

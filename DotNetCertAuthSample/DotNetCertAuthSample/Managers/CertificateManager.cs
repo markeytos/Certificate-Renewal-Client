@@ -179,13 +179,13 @@ public class CertificateManager
                 values.issuer,
                 values.template
             );
-            X509ExtensionCollection extensions = cert.Extensions;
-            List<X509KeyUsageFlags> keyUsages = [];
-            foreach (X509Extension ext in extensions)
+            X509KeyUsageFlags? keyUsages = null;
+            foreach (X509Extension ext in cert.Extensions)
             {
                 if (ext is X509KeyUsageExtension keyUsage)
                 {
-                    keyUsages.Add(keyUsage.KeyUsages);
+                    keyUsages = keyUsage.KeyUsages;
+                    break;
                 }
             }
 
