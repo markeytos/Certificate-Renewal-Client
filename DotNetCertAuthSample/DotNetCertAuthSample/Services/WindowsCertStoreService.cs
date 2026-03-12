@@ -111,7 +111,12 @@ public class WindowsCertStoreService(IStoreService storeService) : ICertStoreSer
         string? password = null
     )
     {
-        Console.WriteLine($"saving to local store {localStore}");
+        string tempPassword = "password"; // not used, just adds private key back to store after it was copied and lost
+        var pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
+        X509KeyStorageFlags flags = localStore
+            ? X509KeyStorageFlags.MachineKeySet
+            : X509KeyStorageFlags.UserKeySet;
+        certificate = X509CertificateLoader.LoadPkcs12(pfx, tempPassword, flags);
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 

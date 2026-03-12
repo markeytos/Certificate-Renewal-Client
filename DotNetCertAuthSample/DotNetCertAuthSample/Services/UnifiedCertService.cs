@@ -144,15 +144,21 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
     {
         RSAParameters rsaParams = new()
         {
-            Modulus = key.Modulus.ToByteArrayUnsigned(),
-            Exponent = key.PublicExponent.ToByteArrayUnsigned(),
-            D = key.Exponent.ToByteArrayUnsigned(),
-            P = key.P.ToByteArrayUnsigned(),
-            Q = key.Q.ToByteArrayUnsigned(),
-            DP = key.DP.ToByteArrayUnsigned(),
-            DQ = key.DQ.ToByteArrayUnsigned(),
-            InverseQ = key.QInv.ToByteArrayUnsigned(),
+            Modulus = key.Modulus?.ToByteArrayUnsigned(),
+            Exponent = key.PublicExponent?.ToByteArrayUnsigned(),
+            D = key.Exponent?.ToByteArrayUnsigned(),
         };
+
+        if (key.P != null)
+            rsaParams.P = key.P.ToByteArrayUnsigned();
+        if (key.Q != null)
+            rsaParams.Q = key.Q.ToByteArrayUnsigned();
+        if (key.DP != null)
+            rsaParams.DP = key.DP.ToByteArrayUnsigned();
+        if (key.DQ != null)
+            rsaParams.DQ = key.DQ.ToByteArrayUnsigned();
+        if (key.QInv != null)
+            rsaParams.InverseQ = key.QInv.ToByteArrayUnsigned();
 
         RSA rsa = RSA.Create();
         rsa.ImportParameters(rsaParams);
