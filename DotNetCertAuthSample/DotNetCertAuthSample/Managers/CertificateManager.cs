@@ -148,11 +148,7 @@ public class CertificateManager(
         Console.WriteLine(
             "This is a test method to validate that everything is working fine. It will try to find a certificate with subject CN=localhost in the user store."
         );
-        X509Certificate2 certificate = UnifiedCertService.GetCertFromStoreBySubject(
-            _storeService,
-            "localhost",
-            true
-        );
+        X509Certificate2 certificate = GetCertFromStoreBySubject("localhost", true);
         Console.WriteLine($"Found certificate: {certificate.Subject}");
         Console.WriteLine($"Found certificate: {certificate.NotAfter}");
         Console.WriteLine("Test completed successfully");
@@ -169,8 +165,7 @@ public class CertificateManager(
         {
             _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
             AssertCorrectRenewArgModel(values);
-            X509Certificate2 cert = UnifiedCertService.GetCertFromStoreBySubject(
-                storeService,
+            X509Certificate2 cert = GetCertFromStoreBySubject(
                 values.Domain!.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
@@ -228,6 +223,123 @@ public class CertificateManager(
             return 1;
         }
         return 0;
+    }
+
+    public X509Certificate2 GetCertFromStoreBySubject(
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = "",
+        string? password = null
+    )
+    {
+        X509Certificate2Collection certs = _storeService.FindCertificatesBySubject(
+            subjectName,
+            localStore,
+            password
+        );
+        X509Certificate2? cert = null;
+        if (certs.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(templateName))
+            {
+                cert = _storeService
+                    .FindCertificatesByTemplate(templateName, localStore, password)
+                    .FirstOrDefault();
+            }
+            else if (!string.IsNullOrWhiteSpace(issuerName))
+            {
+                cert = _storeService
+                    .FindCertificatesByIssuer(templateName, localStore, password)
+                    .FirstOrDefault();
+            }
+            cert ??=
+                certs
+                    .OrderByDescending(x => x.NotAfter)
+                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                ?? certs.OrderByDescending(x => x.NotAfter).First();
+        }
+        else
+        {
+            List<X509Certificate2> matchingCertificates = [];
+            X509Certificate2Collection allStoreCertificates =
+                _storeService.GetAllCertificatesInStore(localStore, password);
+            foreach (
+                X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
+                    i.NotAfter
+                )
+            )
+            {
+                if (
+                    CheckCertificateTemplate(storeCert, templateName)
+                    && CheckCertificateIssuer(storeCert, issuerName)
+                    && storeCert.Subject.Contains(subjectName)
+                )
+                {
+                    matchingCertificates.Add(storeCert);
+                }
+            }
+            if (matchingCertificates.Count == 1)
+            {
+                cert = matchingCertificates[0];
+            }
+            else if (matchingCertificates.Count > 1)
+            {
+                cert =
+                    matchingCertificates
+                        .OrderByDescending(x => x.NotAfter)
+                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                    ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
+            }
+        }
+        if (cert == null)
+        {
+            throw new FileNotFoundException(
+                $"Could not find certificate for domain {subjectName} in {StoreString(localStore)}"
+            );
+        }
+        return cert;
+    }
+
+    private static string StoreString(bool localStore)
+    {
+        if (localStore)
+        {
+            return "local store";
+        }
+        return "user store";
+    }
+
+    public static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
+    {
+        if (string.IsNullOrWhiteSpace(templateName))
+        {
+            return true;
+        }
+        string? certTemplateName = GetCertificateTemplateName(cert);
+        return templateName.Equals(certTemplateName?.Trim());
+    }
+
+    public static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
+    {
+        if (string.IsNullOrWhiteSpace(issuerName))
+        {
+            return true;
+        }
+        return cert.Issuer.Contains(issuerName);
+    }
+
+    private static string? GetCertificateTemplateName(X509Certificate2 certificate)
+    {
+        foreach (var extension in certificate.Extensions)
+        {
+            if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
+            {
+                AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
+                return asnData.Format(true);
+            }
+        }
+        return null;
     }
 
     private async Task CheckAndSaveCertificateToPathAsync(
@@ -972,7 +1084,9 @@ public class CertificateManager(
             Console.WriteLine("No end-entity certificate found in the response");
             return 1;
         }
-        RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
+        RSA rsaPrivateKey = UnifiedCertService.ConvertToDotnetRSA(
+            (RsaPrivateCrtKeyParameters)rsaKeyPair.Private
+        );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         _certStoreService.InstallCertificateWithPrivateKey(cert, localStore, password);
         await CheckAndSaveCertificateToPathAsync(cert, path, password);
@@ -1025,28 +1139,11 @@ public class CertificateManager(
         X509Certificate2 cert = X509CertificateLoader.LoadCertificate(
             bouncyCastleCert.GetEncoded()
         );
-        RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)keyPair.Private);
+        RSA rsaPrivateKey = UnifiedCertService.ConvertToDotnetRSA(
+            (RsaPrivateCrtKeyParameters)keyPair.Private
+        );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         return cert;
-    }
-
-    public static RSA ConvertToRSA(RsaPrivateCrtKeyParameters key)
-    {
-        RSAParameters rsaParams = new()
-        {
-            Modulus = key.Modulus.ToByteArrayUnsigned(),
-            Exponent = key.PublicExponent.ToByteArrayUnsigned(),
-            D = key.Exponent.ToByteArrayUnsigned(),
-            P = key.P.ToByteArrayUnsigned(),
-            Q = key.Q.ToByteArrayUnsigned(),
-            DP = key.DP.ToByteArrayUnsigned(),
-            DQ = key.DQ.ToByteArrayUnsigned(),
-            InverseQ = key.QInv.ToByteArrayUnsigned(),
-        };
-
-        RSA rsa = RSA.Create();
-        rsa.ImportParameters(rsaParams);
-        return rsa;
     }
 
     private Pkcs10CertificationRequest CreateCSRForScep(
