@@ -204,7 +204,7 @@ public class UnifiedCertService
         return cert;
     }
 
-    public static X509Certificate2 GetCertFromStoreByThumbprint(string thumbprint)
+    public static X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint)
     {
         X509Store store = GetCertStore(false);
         X509Certificate2? cert = null;
@@ -218,10 +218,7 @@ public class UnifiedCertService
         {
             cert = certs[0];
         }
-        return cert
-            ?? throw new FileNotFoundException(
-                $"Could not find certificate with thumbprint {thumbprint} in user store"
-            );
+        return cert;
     }
 
     private static string StoreString(bool localStore)
@@ -239,6 +236,13 @@ public class UnifiedCertService
             StoreName.My,
             localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
         );
+    }
+
+    public static void WriteCertificateToStore(X509Store store, X509Certificate2 certificate)
+    {
+        store.Open(OpenFlags.ReadWrite);
+        store.Add(certificate);
+        store.Close();
     }
 
     private static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)

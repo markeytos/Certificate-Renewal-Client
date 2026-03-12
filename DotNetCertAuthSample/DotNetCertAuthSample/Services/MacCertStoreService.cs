@@ -79,9 +79,7 @@ public class MacCertStoreService : ICertStoreService
     {
         X509Store store = UnifiedCertService.GetCertStore(localStore);
         AssertCanWriteToStore(localStore);
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(certificate);
-        store.Close();
+        UnifiedCertService.WriteCertificateToStore(store, certificate);
     }
 
     private static void AssertCanWriteToStore(bool localStore)

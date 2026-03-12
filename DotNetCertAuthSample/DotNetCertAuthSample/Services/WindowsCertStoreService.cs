@@ -18,98 +18,17 @@ public class WindowsCertStoreService : ICertStoreService
         string templateName = ""
     )
     {
-        X509Store store;
-        if (localStore)
-        {
-            store = new(StoreLocation.LocalMachine);
-        }
-        else
-        {
-            store = new(StoreLocation.CurrentUser);
-        }
-        X509Certificate2? cert = null;
-        store.Open(OpenFlags.ReadOnly);
-        X509Certificate2Collection certs = store.Certificates.Find(
-            X509FindType.FindBySubjectName,
+        return UnifiedCertService.GetCertFromStoreBySubject(
             subjectName,
-            true
+            localStore,
+            issuerName,
+            templateName
         );
-        if (certs.Count > 0)
-        {
-            if (!string.IsNullOrWhiteSpace(templateName))
-            {
-                cert = certs
-                    .Find(X509FindType.FindByTemplateName, templateName, true)
-                    .FirstOrDefault();
-            }
-            else if (!string.IsNullOrWhiteSpace(issuerName))
-            {
-                cert = certs.Find(X509FindType.FindByIssuerName, issuerName, true).FirstOrDefault();
-            }
-            cert ??=
-                certs
-                    .OrderByDescending(x => x.NotAfter)
-                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
-                ?? certs.OrderByDescending(x => x.NotAfter).First();
-        }
-        else
-        {
-            List<X509Certificate2> matchingCertificates = new();
-            X509Certificate2Collection allStoreCertificates = store.Certificates;
-            foreach (
-                X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
-                    i.NotAfter
-                )
-            )
-            {
-                if (
-                    CheckCertificateTemplate(storeCert, templateName)
-                    && CheckCertificateIssuer(storeCert, issuerName)
-                    && storeCert.Subject.Contains(subjectName)
-                )
-                {
-                    matchingCertificates.Add(storeCert);
-                }
-            }
-            if (matchingCertificates.Count == 1)
-            {
-                cert = matchingCertificates[0];
-            }
-            else if (matchingCertificates.Count > 1)
-            {
-                cert =
-                    matchingCertificates
-                        .OrderByDescending(x => x.NotAfter)
-                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
-                    ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
-            }
-        }
-        if (cert == null)
-        {
-            throw new FileNotFoundException(
-                $"Could not find certificate for domain {subjectName} "
-                    + $"in the {StoreString(localStore)}"
-            );
-        }
-        return cert;
     }
 
     public X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint)
     {
-        //not recommended since it breaks with auto rotation
-        X509Store store = new(StoreLocation.CurrentUser);
-        X509Certificate2? cert = null;
-        store.Open(OpenFlags.ReadOnly);
-        X509Certificate2Collection certs = store.Certificates.Find(
-            X509FindType.FindByThumbprint,
-            thumbprint,
-            true
-        );
-        if (certs.Count > 0)
-        {
-            cert = certs[0];
-        }
-        return cert;
+        return UnifiedCertService.GetCertFromStoreByThumbprint(thumbprint);
     }
 
     public CsrData CreateCSR(
@@ -203,10 +122,8 @@ public class WindowsCertStoreService : ICertStoreService
 
     public void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
     {
-        X509Store store = new(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(certificate);
-        store.Close();
+        X509Store store = UnifiedCertService.GetCertStore(localStore);
+        UnifiedCertService.WriteCertificateToStore(store, certificate);
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
@@ -222,47 +139,6 @@ public class WindowsCertStoreService : ICertStoreService
         }
         objExtensionAlternativeNames.InitializeEncode(objAlternativeNames);
         return objExtensionAlternativeNames;
-    }
-
-    private static string StoreString(bool localStore)
-    {
-        if (localStore)
-        {
-            return "local store";
-        }
-        return "user store";
-    }
-
-    private static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
-    {
-        if (string.IsNullOrWhiteSpace(templateName))
-        {
-            return true;
-        }
-        string? certTemplateName = GetCertificateTemplateName(cert);
-        return templateName.Equals(certTemplateName?.Trim());
-    }
-
-    private static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
-    {
-        if (string.IsNullOrWhiteSpace(issuerName))
-        {
-            return true;
-        }
-        return cert.Issuer.Contains(issuerName);
-    }
-
-    private static string? GetCertificateTemplateName(X509Certificate2 certificate)
-    {
-        foreach (var extension in certificate.Extensions)
-        {
-            if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
-            {
-                AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
-                return asnData.Format(true);
-            }
-        }
-        return null;
     }
 
     public static CERTENROLLLib.X509KeyUsageFlags? GetKeyUsages(X509Certificate2 certificate)
