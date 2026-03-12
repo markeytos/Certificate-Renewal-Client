@@ -1,5 +1,4 @@
 ﻿using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.Marshalling;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -257,8 +256,17 @@ public class CertificateManager
             createdCert,
             path,
             password,
+            GetPasswordPathFromCertificatePath(path),
             inBinaryForm,
             includePrivateKey
+        );
+    }
+
+    private static string GetPasswordPathFromCertificatePath(string path)
+    {
+        return Path.Join(
+            Path.GetDirectoryName(path),
+            Path.GetFileNameWithoutExtension(path) + "_password.txt"
         );
     }
 
@@ -287,19 +295,25 @@ public class CertificateManager
             certToExport,
             path,
             password,
+            GetPasswordPathFromCertificatePath(path),
             inBinaryForm,
             includePrivateKey
         );
     }
 
-    private static async Task WriteCertificateToFileAsync(
+    private async Task WriteCertificateToFileAsync(
         X509Certificate2 certToExport,
         string path,
         string? password,
+        string passwordPath,
         bool inBinaryForm,
         bool includePrivateKey
     )
     {
+        if (_logger == null)
+        {
+            throw new ArgumentNullException(nameof(_logger));
+        }
         if (inBinaryForm)
         {
             byte[] certBytes;
@@ -307,6 +321,8 @@ public class CertificateManager
             {
                 password = UnifiedCertService.GetOrGeneratePasswordForCert(password);
                 certBytes = certToExport.Export(X509ContentType.Pfx, password);
+                await File.WriteAllTextAsync(passwordPath, password);
+                _logger.LogInformation($"Certificate private key password saved to {passwordPath}");
             }
             else
             {
@@ -329,6 +345,7 @@ public class CertificateManager
             }
             await File.WriteAllTextAsync(path, pem);
         }
+        _logger.LogInformation($"Certificate saved to {path}");
     }
 
     private static string GetRSAPrivateKey(RSA rsaKey)
@@ -434,23 +451,13 @@ public class CertificateManager
         }
     }
 
-    private string ParseAndCreateCertificatePath(string path)
+    private static string ParseAndCreateCertificatePath(string path)
     {
-        // if they specify no ending, using .pfx with private key
-        // otherwise, use their ending (.pem, .pfx, .p12, .cer, .crt, .der)
-        if (string.IsNullOrEmpty(Path.GetExtension(path)))
+        if (string.IsNullOrWhiteSpace(Path.GetExtension(path)))
         {
             path += ".pfx";
         }
-
-        if (!IsValidCertificatePathExtension(path))
-        {
-            throw new ArgumentException(
-                "Invalid certificate file extensions, valid extensions are (.pem, .pfx, .p12, .cer, .crt, .der)"
-            );
-        }
         string? directory = Path.GetDirectoryName(path);
-
         if (string.IsNullOrWhiteSpace(directory))
         {
             throw new Exception("Invalid path");
@@ -591,6 +598,7 @@ public class CertificateManager
     {
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
+        AssertCertificatePathProperties(values.Path);
         if (!IsGuid(values.caID))
         {
             throw new ArgumentException("Please enter a valid CA ID Guid");
@@ -606,6 +614,25 @@ public class CertificateManager
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
+        }
+    }
+
+    private void AssertCertificatePathProperties(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        Path.GetFullPath(path);
+        if (string.IsNullOrWhiteSpace(Path.GetExtension(path)))
+        {
+            path += ".pfx";
+        }
+        if (!IsValidCertificatePathExtension(path))
+        {
+            throw new ArgumentException(
+                "Invalid certificate file extension, valid extensions are (.pem, .pfx, .p12, .cer, .crt, .der)"
+            );
         }
     }
 
@@ -705,6 +732,7 @@ public class CertificateManager
 
     private void ValidateCreateDCCertificateModel(CreateDCCertificate values)
     {
+        AssertCertificatePathProperties(values.Path);
         if (!IsGuid(values.caID))
         {
             throw new ArgumentException("Please enter a valid CA ID Guid");
@@ -772,6 +800,7 @@ public class CertificateManager
     private void ValidateSCEPArgModel(SCEPArgModel values)
     {
         AssertLocalStoreProperties(values.LocalCertStore);
+        AssertCertificatePathProperties(values.Path);
         if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
         {
             values.SubjectAltNames = GetFQDN();
