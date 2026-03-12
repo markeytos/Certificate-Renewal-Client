@@ -57,4 +57,18 @@ public class SCEPArgModel
         HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
+
+    [Option(
+        "Password",
+        Required = false,
+        HelpText = "Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
+    )]
+    public string? Password { get; set; }
+
+    [Option(
+        "Path",
+        Required = false,
+        HelpText = "If specified, certificate will be saved to that path. If specified with pfx ending, private key will be saved."
+    )]
+    public string? Path { get; set; }
 }

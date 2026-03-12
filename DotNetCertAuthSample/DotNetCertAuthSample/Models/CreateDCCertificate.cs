@@ -95,4 +95,18 @@ public class CreateDCCertificate
         HelpText = "A comma-separate list of additional Subject Alternate Names to be added to this certificate, in addition to the Domain name. When not specified, only the Domain name is added as a SAN. For example: server1.contoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
+
+    [Option(
+        "Password",
+        Required = false,
+        HelpText = "Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
+    )]
+    public string? Password { get; set; }
+
+    [Option(
+        "Path",
+        Required = false,
+        HelpText = "If specified, certificate will be saved to that path. If specified with pfx ending, private key will be saved."
+    )]
+    public string? Path { get; set; }
 }

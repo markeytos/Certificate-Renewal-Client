@@ -73,8 +73,14 @@ public class RenewArgModel
     [Option(
         "Password",
         Required = false,
-        Default = "",
-        HelpText = "(Linux-only) Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
+        HelpText = "Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
     )]
     public string? Password { get; set; }
+
+    [Option(
+        "Path",
+        Required = false,
+        HelpText = "If specified, certificate will be saved to that path. If specified with pfx ending, private key will be saved."
+    )]
+    public string? Path { get; set; }
 }

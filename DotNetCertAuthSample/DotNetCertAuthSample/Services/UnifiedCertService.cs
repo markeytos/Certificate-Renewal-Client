@@ -73,6 +73,26 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
         return certWithKey;
     }
 
+    public static void CreateDirectoryIfNotExists(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+    }
+
+    public static string GetOrGeneratePasswordForCert(string? password)
+    {
+        if (!string.IsNullOrWhiteSpace(password))
+        {
+            return password;
+        }
+
+        const string alphanumericCharacters =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
+    }
+
     private static X509KeyUsage ConvertKeyUsages(X509KeyUsageFlags? keyUsage)
     {
         if (keyUsage is null)

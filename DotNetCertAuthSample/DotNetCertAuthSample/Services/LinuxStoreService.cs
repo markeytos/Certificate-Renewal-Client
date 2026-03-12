@@ -14,7 +14,7 @@ public class LinuxStoreService : IStoreService
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _userStorePath = Path.Combine(homeDir, ".local", "share", "keytos", "certs");
 
-        CreateDirectoryIfNotExists(_userStorePath);
+        UnifiedCertService.CreateDirectoryIfNotExists(_userStorePath);
     }
 
     public X509Certificate2Collection FindCertificatesBySubject(
@@ -137,7 +137,7 @@ public class LinuxStoreService : IStoreService
         }
 
         string storePath = GetStorePath(localStore);
-        CreateDirectoryIfNotExists(storePath);
+        UnifiedCertService.CreateDirectoryIfNotExists(storePath);
 
         string certFilename = GetFileNameFromCertificate(certificate);
         string certPath = Path.Combine(storePath, certFilename);
@@ -145,7 +145,7 @@ public class LinuxStoreService : IStoreService
         string passwordFileName = GetPasswordFileNameFromCertificate(certificate);
         string passwordPath = Path.Combine(storePath, passwordFileName);
 
-        password = GetOrGeneratePassword(password);
+        password = UnifiedCertService.GetOrGeneratePasswordForCert(password);
         byte[] certBytes = certificate.Export(X509ContentType.Pfx, password);
 
         File.WriteAllBytes(certPath, certBytes);
@@ -199,14 +199,6 @@ public class LinuxStoreService : IStoreService
         return storePath;
     }
 
-    private static void CreateDirectoryIfNotExists(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            Directory.CreateDirectory(path);
-        }
-    }
-
     private static string StoreString(bool localStore)
     {
         if (localStore)
@@ -214,17 +206,5 @@ public class LinuxStoreService : IStoreService
             return "local store";
         }
         return "user store";
-    }
-
-    private static string GetOrGeneratePassword(string? password)
-    {
-        if (!string.IsNullOrWhiteSpace(password))
-        {
-            return password;
-        }
-
-        const string alphanumericCharacters =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
     }
 }

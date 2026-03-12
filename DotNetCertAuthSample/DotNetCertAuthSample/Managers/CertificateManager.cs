@@ -177,7 +177,8 @@ public class CertificateManager
                 values.Domain!.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
-                values.template
+                values.template,
+                values.Password
             );
             X509KeyUsageFlags? keyUsages = null;
             foreach (X509Extension ext in cert.Extensions)
@@ -207,7 +208,12 @@ public class CertificateManager
             Console.WriteLine($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
-            _certStoreService.InstallCertificate(createdCert, csrData, values.LocalCertStore);
+            _certStoreService.InstallCertificate(
+                createdCert,
+                csrData,
+                values.LocalCertStore,
+                values.Password
+            );
             _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
             Console.WriteLine($"certificate {values.Domain} was renewed successfully");
             if (values.RDPCert)
@@ -216,6 +222,7 @@ public class CertificateManager
                     CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint
                 );
             }
+            await CheckAndSaveCertificateToPath(createdCert, csrData, values.Path, values.Password);
         }
         catch (Exception ex)
         {
@@ -224,6 +231,279 @@ public class CertificateManager
             return 1;
         }
         return 0;
+    }
+
+    private async Task CheckAndSaveCertificateToPathAsync(
+        X509Certificate2 createdCert,
+        string? path,
+        string? password
+    )
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        path = ParseAndCreateCertificatePath(path);
+        bool inBinaryForm = IsBinaryCertificateFormat(path);
+        bool includePrivateKey = ShouldIncludePrivateKey(path);
+
+        if (includePrivateKey && !createdCert.HasPrivateKey)
+        {
+            throw new ArgumentException(
+                "The certificate does not have a private key to export, but the file extension indicates that the private key should be included."
+            );
+        }
+        await WriteCertificateToFileAsync(
+            createdCert,
+            path,
+            password,
+            inBinaryForm,
+            includePrivateKey
+        );
+    }
+
+    private async Task CheckAndSaveCertificateToPath(
+        string createdCert,
+        CsrData csrData,
+        string? path,
+        string? password
+    )
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        path = ParseAndCreateCertificatePath(path);
+        bool inBinaryForm = IsBinaryCertificateFormat(path);
+        bool includePrivateKey = ShouldIncludePrivateKey(path);
+
+        X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
+        if (includePrivateKey)
+        {
+            certToExport = UnifiedCertService.CopyPrivateKeyFromCsr(createdCert, csrData);
+        }
+
+        await WriteCertificateToFileAsync(
+            certToExport,
+            path,
+            password,
+            inBinaryForm,
+            includePrivateKey
+        );
+    }
+
+    private static async Task WriteCertificateToFileAsync(
+        X509Certificate2 certToExport,
+        string path,
+        string? password,
+        bool inBinaryForm,
+        bool includePrivateKey
+    )
+    {
+        if (inBinaryForm)
+        {
+            byte[] certBytes;
+            if (includePrivateKey)
+            {
+                password = UnifiedCertService.GetOrGeneratePasswordForCert(password);
+                certBytes = certToExport.Export(X509ContentType.Pfx, password);
+            }
+            else
+            {
+                certBytes = certToExport.Export(X509ContentType.Cert);
+            }
+            await File.WriteAllBytesAsync(path, certBytes);
+        }
+        else
+        {
+            string pem;
+            if (includePrivateKey)
+            {
+                string certPem = CryptoStaticService.ExportToPEM(certToExport);
+                string privateKeyPem = GetRSAPrivateKey(certToExport.GetRSAPrivateKey()!);
+                pem = string.Join(Environment.NewLine, certPem, privateKeyPem);
+            }
+            else
+            {
+                pem = CryptoStaticService.ExportToPEM(certToExport);
+            }
+            await File.WriteAllTextAsync(path, pem);
+        }
+    }
+
+    private static string GetRSAPrivateKey(RSA rsaKey)
+    {
+        RSAParameters parameters = rsaKey.ExportParameters(true);
+        using (MemoryStream stream = new())
+        {
+            var writer = new BinaryWriter(stream);
+            writer.Write((byte)0x30); // SEQUENCE
+            using (MemoryStream innerStream = new())
+            {
+                BinaryWriter innerWriter = new(innerStream);
+                EncodeIntegerBigEndian(innerWriter, [0x00]); // Version
+                EncodeIntegerBigEndian(innerWriter, parameters.Modulus!);
+                EncodeIntegerBigEndian(innerWriter, parameters.Exponent!);
+                EncodeIntegerBigEndian(innerWriter, parameters.D!);
+                EncodeIntegerBigEndian(innerWriter, parameters.P!);
+                EncodeIntegerBigEndian(innerWriter, parameters.Q!);
+                EncodeIntegerBigEndian(innerWriter, parameters.DP!);
+                EncodeIntegerBigEndian(innerWriter, parameters.DQ!);
+                EncodeIntegerBigEndian(innerWriter, parameters.InverseQ!);
+                int length = (int)innerStream.Length;
+                EncodeLength(writer, length);
+                writer.Write(innerStream.GetBuffer(), 0, length);
+            }
+            char[] base64 = Convert
+                .ToBase64String(stream.GetBuffer(), 0, (int)stream.Length)
+                .ToCharArray();
+            using (StringWriter outputStream = new())
+            {
+                outputStream.WriteLine("-----BEGIN RSA PRIVATE KEY-----");
+                for (var i = 0; i < base64.Length; i += 64)
+                {
+                    outputStream.WriteLine(base64, i, Math.Min(64, base64.Length - i));
+                }
+                outputStream.WriteLine("-----END RSA PRIVATE KEY-----");
+                return outputStream.ToString();
+            }
+        }
+    }
+
+    private static void EncodeIntegerBigEndian(
+        BinaryWriter stream,
+        byte[] value,
+        bool forceUnsigned = true
+    )
+    {
+        stream.Write((byte)0x02); // INTEGER
+        int prefixZeros = 0;
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (value[i] != 0)
+                break;
+            prefixZeros++;
+        }
+        if (value.Length - prefixZeros == 0)
+        {
+            EncodeLength(stream, 1);
+            stream.Write((byte)0);
+        }
+        else
+        {
+            if (forceUnsigned && value[prefixZeros] > 0x7f)
+            {
+                // Add a prefix zero to force unsigned if the MSB is 1
+                EncodeLength(stream, value.Length - prefixZeros + 1);
+                stream.Write((byte)0);
+            }
+            else
+            {
+                EncodeLength(stream, value.Length - prefixZeros);
+            }
+            for (var i = prefixZeros; i < value.Length; i++)
+            {
+                stream.Write(value[i]);
+            }
+        }
+    }
+
+    private static void EncodeLength(BinaryWriter stream, int length)
+    {
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(length), "Length must be non-negative");
+        if (length < 0x80)
+        {
+            // Short form
+            stream.Write((byte)length);
+        }
+        else
+        {
+            int temp = length;
+            int bytesRequired = 0;
+            while (temp > 0)
+            {
+                temp >>= 8;
+                bytesRequired++;
+            }
+            stream.Write((byte)(bytesRequired | 0x80));
+            for (int i = bytesRequired - 1; i >= 0; i--)
+            {
+                stream.Write((byte)(length >> (8 * i) & 0xff));
+            }
+        }
+    }
+
+    private string ParseAndCreateCertificatePath(string path)
+    {
+        // if they specify no ending, using .pfx with private key
+        // otherwise, use their ending (.pem, .pfx, .p12, .cer, .crt, .der)
+        if (string.IsNullOrEmpty(Path.GetExtension(path)))
+        {
+            path += ".pfx";
+        }
+
+        if (!IsValidCertificatePathExtension(path))
+        {
+            throw new ArgumentException(
+                "Invalid certificate file extensions, valid extensions are (.pem, .pfx, .p12, .cer, .crt, .der)"
+            );
+        }
+        string? directory = Path.GetDirectoryName(path);
+
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            throw new Exception("Invalid path");
+        }
+
+        if (!Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        return path;
+    }
+
+    private bool IsBinaryCertificateFormat(string path)
+    {
+        return Path.GetExtension(path).ToLower() switch
+        {
+            ".pem" => false,
+            ".pfx" => true,
+            ".p12" => true,
+            ".cer" => true,
+            ".crt" => true,
+            ".der" => true,
+            _ => false,
+        };
+    }
+
+    private bool ShouldIncludePrivateKey(string path)
+    {
+        return Path.GetExtension(path).ToLower() switch
+        {
+            ".pem" => false,
+            ".pfx" => true,
+            ".p12" => true,
+            ".cer" => false,
+            ".crt" => false,
+            ".der" => false,
+            _ => false,
+        };
+    }
+
+    private bool IsValidCertificatePathExtension(string path)
+    {
+        return Path.GetExtension(path).ToLower() switch
+        {
+            ".pem" => true,
+            ".pfx" => true,
+            ".p12" => true,
+            ".cer" => true,
+            ".crt" => true,
+            ".der" => true,
+            _ => false,
+        };
     }
 
     private static void AssertCorrectRenewArgModel(RenewArgModel values)
@@ -288,7 +568,10 @@ public class CertificateManager
                 ekus,
                 values.KeyLength,
                 "",
-                values.KeyProvider
+                values.KeyProvider,
+                null,
+                values.Path,
+                values.Password
             );
             if (values.RDPCert)
             {
@@ -406,7 +689,9 @@ public class CertificateManager
                 values.KeyLength,
                 values.DCGUID,
                 values.KeyProvider,
-                additionalSANs
+                additionalSANs,
+                values.Path,
+                values.Password
             );
         }
         catch (Exception ex)
@@ -602,13 +887,15 @@ public class CertificateManager
                 );
             }
             byte[] responseBytes = await response.Content.ReadAsByteArrayAsync();
-            return DecodeAndInstallSCEPCertificate(
+            return await DecodeAndInstallSCEPCertificate(
                 responseBytes,
                 rsaKeyPair,
                 caCertificate,
                 nonceBytes,
                 cert,
-                values.LocalCertStore
+                values.LocalCertStore,
+                values.Path,
+                values.Password
             );
         }
         catch (Exception ex)
@@ -619,13 +906,15 @@ public class CertificateManager
         }
     }
 
-    private int DecodeAndInstallSCEPCertificate(
+    private async Task<int> DecodeAndInstallSCEPCertificate(
         byte[] responseBytes,
         AsymmetricCipherKeyPair rsaKeyPair,
         X509Certificate2 caCertificate,
         byte[] nonce,
         X509Certificate2 signingCert,
-        bool localStore
+        bool localStore,
+        string? path = null,
+        string? password = null
     )
     {
         var signedResponse = new SignedCms();
@@ -658,7 +947,8 @@ public class CertificateManager
         }
         RSA rsaPrivateKey = ConvertToRSA((RsaPrivateCrtKeyParameters)rsaKeyPair.Private);
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
-        _certStoreService.InstallCertificateWithPrivateKey(cert, localStore);
+        _certStoreService.InstallCertificateWithPrivateKey(cert, localStore, password);
+        await CheckAndSaveCertificateToPathAsync(cert, path, password);
         return 0;
     }
 
@@ -920,7 +1210,9 @@ public class CertificateManager
         int keyLength,
         string dcGUID = "",
         string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-        List<string>? additionalSubjectAltNames = null
+        List<string>? additionalSubjectAltNames = null,
+        string? path = "",
+        string? password = null
     )
     {
         if (_logger == null)
@@ -999,12 +1291,19 @@ public class CertificateManager
             _certStoreService.InstallCertificate(
                 CryptoStaticService.ExportToPEM(cert),
                 csrData,
-                localStore
+                localStore,
+                password
             );
             message =
                 $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}";
             _logger.LogInformation(message);
             Console.WriteLine(message);
+            await CheckAndSaveCertificateToPath(
+                CryptoStaticService.ExportToPEM(cert),
+                csrData,
+                path,
+                password
+            );
             return cert;
         }
         throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
