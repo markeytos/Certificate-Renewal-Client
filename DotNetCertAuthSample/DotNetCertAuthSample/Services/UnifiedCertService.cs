@@ -189,7 +189,8 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
-    public X509Certificate2 GetCertFromStoreBySubject(
+    public static X509Certificate2 GetCertFromStoreBySubject(
+        IStoreService storeService,
         string subjectName,
         bool localStore,
         string issuerName = "",

@@ -35,7 +35,11 @@ using X509Extension = System.Security.Cryptography.X509Certificates.X509Extensio
 
 namespace DotNetCertAuthSample.Managers;
 
-public class CertificateManager
+public class CertificateManager(
+    ICertStoreService certStoreService,
+    ISystemInfoService systemInfoService,
+    IStoreService storeService
+)
 {
     private ILogger? _logger;
     private RenewArgModel? _renewArgModel;
@@ -44,19 +48,11 @@ public class CertificateManager
     private CreateDCCertificate? _createDCCertArgModel;
     private SCEPArgModel? _scepArgModel;
     private TestModel? _testModel;
-    private HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
-    private readonly ICertStoreService _certStoreService;
-    private readonly ISystemInfoService _systemInfoService;
-
-    public CertificateManager(
-        ICertStoreService certStoreService,
-        ISystemInfoService systemInfoService
-    )
-    {
-        _certStoreService = certStoreService;
-        _systemInfoService = systemInfoService;
-    }
+    private readonly ICertStoreService _certStoreService = certStoreService;
+    private readonly ISystemInfoService _systemInfoService = systemInfoService;
+    private readonly IStoreService _storeService = storeService;
 
     public int InitializeManager(RenewArgModel values)
     {
@@ -152,7 +148,8 @@ public class CertificateManager
         Console.WriteLine(
             "This is a test method to validate that everything is working fine. It will try to find a certificate with subject CN=localhost in the user store."
         );
-        X509Certificate2 certificate = _certStoreService.GetCertFromStoreBySubject(
+        X509Certificate2 certificate = UnifiedCertService.GetCertFromStoreBySubject(
+            _storeService,
             "localhost",
             true
         );
@@ -172,7 +169,8 @@ public class CertificateManager
         {
             _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
             AssertCorrectRenewArgModel(values);
-            X509Certificate2 cert = _certStoreService.GetCertFromStoreBySubject(
+            X509Certificate2 cert = UnifiedCertService.GetCertFromStoreBySubject(
+                storeService,
                 values.Domain!.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,

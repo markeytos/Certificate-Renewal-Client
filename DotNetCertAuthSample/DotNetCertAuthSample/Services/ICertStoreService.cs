@@ -5,14 +5,6 @@ namespace DotNetCertAuthSample.Services;
 
 public interface ICertStoreService
 {
-    X509Certificate2 GetCertFromStoreBySubject(
-        string subjectName,
-        bool localStore,
-        string issuerName = "",
-        string templateName = "",
-        string? password = null
-    );
-
     CsrData CreateCSR(
         string subjectName,
         List<string> sans,
