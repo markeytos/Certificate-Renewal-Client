@@ -69,4 +69,12 @@ public class RenewArgModel
         HelpText = "Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)"
     )]
     public string KeyProvider { get; set; } = "Microsoft Enhanced Cryptographic Provider v1.0";
+
+    [Option(
+        "Password",
+        Required = false,
+        Default = "",
+        HelpText = "(Linux-only) Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
+    )]
+    public string? Password { get; set; }
 }

@@ -13,11 +13,13 @@ public class Program
         // Determine platform and create appropriate services
         ICertStoreService certStoreService;
         ISystemInfoService systemInfoService;
+        IStoreService storeService;
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
 #if WINDOWS
-            certStoreService = new WindowsCertStoreService();
+            storeService = new UnifiedStoreService();
+            certStoreService = new WindowsCertStoreService(storeService);
             systemInfoService = new WindowsSystemInfoService();
 #else
             Console.WriteLine("Windows-specific services not available");
@@ -26,12 +28,14 @@ public class Program
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            certStoreService = new LinuxCertStoreService();
+            storeService = new LinuxStoreService();
+            certStoreService = new UnifiedCertService(storeService);
             systemInfoService = new UnifiedSystemInfoService();
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            certStoreService = new MacCertStoreService();
+            storeService = new UnifiedStoreService();
+            certStoreService = new UnifiedCertService(storeService);
             systemInfoService = new UnifiedSystemInfoService();
         }
         else

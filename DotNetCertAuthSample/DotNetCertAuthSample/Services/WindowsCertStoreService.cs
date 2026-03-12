@@ -9,7 +9,7 @@ using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyU
 
 namespace DotNetCertAuthSample.Services;
 
-public class WindowsCertStoreService : ICertStoreService
+public class WindowsCertStoreService(IStoreService storeService) : ICertStoreService
 {
     public X509Certificate2 GetCertFromStoreBySubject(
         string subjectName,
@@ -18,17 +18,13 @@ public class WindowsCertStoreService : ICertStoreService
         string templateName = ""
     )
     {
-        return UnifiedCertService.GetCertFromStoreBySubject(
+        return UnifiedCertService.GetCertFromStore(
+            storeService,
             subjectName,
             localStore,
             issuerName,
             templateName
         );
-    }
-
-    public X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint)
-    {
-        return UnifiedCertService.GetCertFromStoreByThumbprint(thumbprint);
     }
 
     public CsrData CreateCSR(
@@ -102,7 +98,12 @@ public class WindowsCertStoreService : ICertStoreService
         return ConvertKeyUsage(keyUsageFlags);
     }
 
-    public void InstallCertificate(string cert, CsrData csrData)
+    public void InstallCertificate(
+        string cert,
+        CsrData csrData,
+        bool localStore,
+        string? password = null
+    )
     {
         if (csrData.PrivateKeyContext is not CX509CertificateRequestPkcs10 certRequest)
         {
@@ -120,10 +121,13 @@ public class WindowsCertStoreService : ICertStoreService
         );
     }
 
-    public void InstallFullCertificate(X509Certificate2 certificate, bool localStore)
+    public void InstallCertificateWithPrivateKey(
+        X509Certificate2 certificate,
+        bool localStore,
+        string? password = null
+    )
     {
-        X509Store store = UnifiedCertService.GetCertStore(localStore);
-        UnifiedCertService.WriteCertificateToStore(store, certificate);
+        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)

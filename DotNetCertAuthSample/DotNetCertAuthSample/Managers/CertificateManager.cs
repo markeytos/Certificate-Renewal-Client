@@ -1013,18 +1013,18 @@ public class CertificateManager
     private static async Task<AvailableCAModel> GetCAAsync(string caID, IEZCAClient ezcaClient)
     {
         AvailableCAModel[]? availableCAs = await ezcaClient.GetAvailableCAsAsync();
-        if (availableCAs == null || availableCAs.Any() == false)
+        if (availableCAs == null || availableCAs.Length == 0)
         {
             throw new NullReferenceException("Could not find any available CAs in EZCA");
         }
         AvailableCAModel? selectedCA = availableCAs.FirstOrDefault(i => i.CAID == caID);
-        if (selectedCA == null)
+        if (selectedCA != null)
         {
-            throw new ArgumentOutOfRangeException(
-                $"No CA with CA ID {caID} was found, make sure you have access to request from this CA"
-            );
+            return selectedCA;
         }
-        return selectedCA;
+        throw new ArgumentOutOfRangeException(
+            $"No CA with CA ID {caID} was found, make sure you have access to request from this CA"
+        );
     }
 
     private static TokenCredential CreateTokenCredential(

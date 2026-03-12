@@ -9,10 +9,9 @@ public interface ICertStoreService
         string subjectName,
         bool localStore,
         string issuerName = "",
-        string templateName = ""
+        string templateName = "",
+        string? password = null
     );
-
-    X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint);
 
     CsrData CreateCSR(
         string subjectName,
@@ -24,7 +23,11 @@ public interface ICertStoreService
         X509KeyUsageFlags? keyUsageFlags = null
     );
 
-    void InstallCertificate(string cert, CsrData csrData, bool localStore);
+    void InstallCertificate(string cert, CsrData csrData, bool localStore, string? password = null);
 
-    void InstallCertificateWithPrivateKey(X509Certificate2 certificate, bool localStore);
+    void InstallCertificateWithPrivateKey(
+        X509Certificate2 certificate,
+        bool localStore,
+        string? password = null
+    );
 }

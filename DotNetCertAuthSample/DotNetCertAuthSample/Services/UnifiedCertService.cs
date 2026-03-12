@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using EZCAClient.Services;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
@@ -15,13 +16,15 @@ using Org.BouncyCastle.X509;
 
 namespace DotNetCertAuthSample.Services;
 
-public class UnifiedCertService
+public class UnifiedCertService(IStoreService storeService) : ICertStoreService
 {
-    public static CsrData CreateCSR(
+    public CsrData CreateCSR(
         string subjectName,
         List<string> sans,
         int keylength,
+        bool localStore,
         List<string> ekus,
+        string keyProvider = "",
         X509KeyUsageFlags? keyUsage = null
     )
     {
@@ -52,6 +55,22 @@ public class UnifiedCertService
         }
 
         return new CsrData { CsrPem = csrPemBuilder.ToString(), PrivateKeyContext = keyPair };
+    }
+
+    public static X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData)
+    {
+        if (csrData.PrivateKeyContext is not AsymmetricCipherKeyPair keyPair)
+        {
+            throw new ArgumentException("Invalid CSR context for Linux certificate installation");
+        }
+
+        X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
+
+        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
+        RSA rsa = ConvertToDotnetRSA(rsaParams);
+
+        X509Certificate2 certWithKey = certificate.CopyWithPrivateKey(rsa);
+        return certWithKey;
     }
 
     private static X509KeyUsage ConvertKeyUsages(X509KeyUsageFlags? keyUsage)
@@ -130,32 +149,53 @@ public class UnifiedCertService
         return rsa;
     }
 
-    public static X509Certificate2 GetCertFromStoreBySubject(
+    public void InstallCertificate(
+        string cert,
+        CsrData csrData,
+        bool localStore,
+        string? password = null
+    )
+    {
+        X509Certificate2 certificate = CopyPrivateKeyFromCsr(cert, csrData);
+        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+    }
+
+    public void InstallCertificateWithPrivateKey(
+        X509Certificate2 certificate,
+        bool localStore,
+        string? password = null
+    )
+    {
+        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+    }
+
+    public X509Certificate2 GetCertFromStoreBySubject(
         string subjectName,
         bool localStore,
         string issuerName = "",
-        string templateName = ""
+        string templateName = "",
+        string? password = null
     )
     {
-        X509Store store = GetCertStore(localStore);
-        X509Certificate2? cert = null;
-        store.Open(OpenFlags.ReadOnly);
-        X509Certificate2Collection certs = store.Certificates.Find(
-            X509FindType.FindBySubjectName,
+        X509Certificate2Collection certs = storeService.FindCertificatesBySubject(
             subjectName,
-            true
+            localStore,
+            password
         );
+        X509Certificate2? cert = null;
         if (certs.Count > 0)
         {
             if (!string.IsNullOrWhiteSpace(templateName))
             {
-                cert = certs
-                    .Find(X509FindType.FindByTemplateName, templateName, true)
+                cert = storeService
+                    .FindCertificatesByTemplate(templateName, localStore, password)
                     .FirstOrDefault();
             }
             else if (!string.IsNullOrWhiteSpace(issuerName))
             {
-                cert = certs.Find(X509FindType.FindByIssuerName, issuerName, true).FirstOrDefault();
+                cert = storeService
+                    .FindCertificatesByIssuer(templateName, localStore, password)
+                    .FirstOrDefault();
             }
             cert ??=
                 certs
@@ -165,8 +205,9 @@ public class UnifiedCertService
         }
         else
         {
-            List<X509Certificate2> matchingCertificates = new();
-            X509Certificate2Collection allStoreCertificates = store.Certificates;
+            List<X509Certificate2> matchingCertificates = [];
+            X509Certificate2Collection allStoreCertificates =
+                storeService.GetAllCertificatesInStore(localStore, password);
             foreach (
                 X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
                     i.NotAfter
@@ -204,23 +245,6 @@ public class UnifiedCertService
         return cert;
     }
 
-    public static X509Certificate2? GetCertFromStoreByThumbprint(string thumbprint)
-    {
-        X509Store store = GetCertStore(false);
-        X509Certificate2? cert = null;
-        store.Open(OpenFlags.ReadOnly);
-        X509Certificate2Collection certs = store.Certificates.Find(
-            X509FindType.FindByThumbprint,
-            thumbprint,
-            true
-        );
-        if (certs.Count > 0)
-        {
-            cert = certs[0];
-        }
-        return cert;
-    }
-
     private static string StoreString(bool localStore)
     {
         if (localStore)
@@ -230,22 +254,7 @@ public class UnifiedCertService
         return "user store";
     }
 
-    public static X509Store GetCertStore(bool localStore)
-    {
-        return new X509Store(
-            StoreName.My,
-            localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
-        );
-    }
-
-    public static void WriteCertificateToStore(X509Store store, X509Certificate2 certificate)
-    {
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(certificate);
-        store.Close();
-    }
-
-    private static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
+    public static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
     {
         if (string.IsNullOrWhiteSpace(templateName))
         {
@@ -255,7 +264,7 @@ public class UnifiedCertService
         return templateName.Equals(certTemplateName?.Trim());
     }
 
-    private static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
+    public static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
     {
         if (string.IsNullOrWhiteSpace(issuerName))
         {
