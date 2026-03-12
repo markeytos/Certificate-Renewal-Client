@@ -191,32 +191,17 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
         X509KeyUsage keyUsage
     )
     {
-        var attributes = new List<AttributePkcs>();
-
-        if (sans.Count == 0)
-        {
-            return new DerSet(attributes.ToArray());
-        }
-        GeneralName[] generalNames = sans.Select(san => new GeneralName(GeneralName.DnsName, san))
-            .ToArray();
-
-        GeneralNames subjectAlternativeNames = new(generalNames);
+        List<AttributePkcs> attributes = [];
         X509ExtensionsGenerator extensionsGenerator = new();
-        extensionsGenerator.AddExtension(
-            X509Extensions.SubjectAlternativeName,
-            false,
-            subjectAlternativeNames
-        );
+
+        if (sans.Count > 0)
+        {
+            AddSubjectAlternativeNames(extensionsGenerator, sans);
+        }
 
         if (ekus.Count > 0)
         {
-            var ekuOids = ekus.Select(oid => new DerObjectIdentifier(oid)).ToArray();
-            var extendedKeyUsage = new ExtendedKeyUsage(ekuOids);
-            extensionsGenerator.AddExtension(
-                X509Extensions.ExtendedKeyUsage,
-                false,
-                extendedKeyUsage
-            );
+            AddEKUs(ekus, extensionsGenerator);
         }
 
         extensionsGenerator.AddExtension(X509Extensions.KeyUsage, true, keyUsage);
@@ -229,5 +214,29 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
         attributes.Add(extensionRequest);
 
         return new DerSet(attributes.ToArray());
+    }
+
+    private static void AddEKUs(List<string> ekus, X509ExtensionsGenerator extensionsGenerator)
+    {
+        DerObjectIdentifier[] ekuOids = ekus.Select(oid => new DerObjectIdentifier(oid)).ToArray();
+        ExtendedKeyUsage extendedKeyUsage = new(ekuOids);
+        extensionsGenerator.AddExtension(X509Extensions.ExtendedKeyUsage, false, extendedKeyUsage);
+    }
+
+    private static void AddSubjectAlternativeNames(
+        X509ExtensionsGenerator extensionsGenerator,
+        List<string> sans
+    )
+    {
+        GeneralName[] generalNames = sans.Select(san => new GeneralName(GeneralName.DnsName, san))
+            .ToArray();
+
+        GeneralNames subjectAlternativeNames = new(generalNames);
+
+        extensionsGenerator.AddExtension(
+            X509Extensions.SubjectAlternativeName,
+            false,
+            subjectAlternativeNames
+        );
     }
 }
