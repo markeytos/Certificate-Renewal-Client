@@ -73,6 +73,10 @@ public class UnifiedStoreService : IStoreService
         string? password = null
     )
     {
+        if (!certificate.HasPrivateKey)
+        {
+            throw new Exception("Certificate does not have private key");
+        }
         X509Store store = GetCertStore(localStore);
         store.Open(OpenFlags.ReadWrite);
         store.Add(certificate);

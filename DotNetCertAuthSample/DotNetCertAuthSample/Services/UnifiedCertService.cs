@@ -177,7 +177,7 @@ public class UnifiedCertService(IStoreService storeService) : ICertStoreService
     )
     {
         X509Certificate2 certificate = CopyPrivateKeyFromCsr(cert, csrData);
-        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+        InstallCertificateWithPrivateKey(certificate, localStore, password);
     }
 
     public void InstallCertificateWithPrivateKey(

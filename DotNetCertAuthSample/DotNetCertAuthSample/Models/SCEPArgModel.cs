@@ -12,10 +12,10 @@ public class SCEPArgModel
     [Option(
         "LocalStore",
         Required = false,
-        Default = true,
+        Default = false,
         HelpText = "If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store"
     )]
-    public bool LocalCertStore { get; set; } = true;
+    public bool LocalCertStore { get; set; }
 
     [Option(
         "EKUs",

@@ -11,22 +11,6 @@ namespace DotNetCertAuthSample.Services;
 
 public class WindowsCertStoreService(IStoreService storeService) : ICertStoreService
 {
-    public X509Certificate2 GetCertFromStoreBySubject(
-        string subjectName,
-        bool localStore,
-        string issuerName = "",
-        string templateName = ""
-    )
-    {
-        return UnifiedCertService.GetCertFromStore(
-            storeService,
-            subjectName,
-            localStore,
-            issuerName,
-            templateName
-        );
-    }
-
     public CsrData CreateCSR(
         string subjectName,
         List<string> sans,
@@ -95,7 +79,7 @@ public class WindowsCertStoreService(IStoreService storeService) : ICertStoreSer
                 | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
         }
 
-        return ConvertKeyUsage(keyUsageFlags);
+        return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
     }
 
     public void InstallCertificate(
@@ -127,6 +111,7 @@ public class WindowsCertStoreService(IStoreService storeService) : ICertStoreSer
         string? password = null
     )
     {
+        Console.WriteLine($"saving to local store {localStore}");
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
@@ -167,7 +152,7 @@ public class WindowsCertStoreService(IStoreService storeService) : ICertStoreSer
         return null;
     }
 
-    private static CERTENROLLLib.X509KeyUsageFlags? ConvertKeyUsage(X509KeyUsageFlags keyUsageFlags)
+    private static CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsage(X509KeyUsageFlags keyUsageFlags)
     {
         CERTENROLLLib.X509KeyUsageFlags flags = 0;
 
