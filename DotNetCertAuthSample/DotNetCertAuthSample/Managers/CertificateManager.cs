@@ -250,7 +250,7 @@ public class CertificateManager(
             else if (!string.IsNullOrWhiteSpace(issuerName))
             {
                 cert = _storeService
-                    .FindCertificatesByIssuer(templateName, localStore, password)
+                    .FindCertificatesByIssuer(issuerName, localStore, password)
                     .FirstOrDefault();
             }
             cert ??=
@@ -568,12 +568,7 @@ public class CertificateManager(
             path += ".pfx";
         }
         string? directory = Path.GetDirectoryName(path);
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            throw new Exception("Invalid path");
-        }
-
-        if (!Directory.Exists(directory))
+        if (directory != null && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }

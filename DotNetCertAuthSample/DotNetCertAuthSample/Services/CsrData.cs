@@ -11,7 +11,7 @@ namespace DotNetCertAuthSample.Services
         public string CsrPem { get; set; } = string.Empty;
 
         /// <summary>
-        /// Platform-specific private key context (e.g., CX509CertificateRequestPkcs10 on Windows, RSA on Linux)
+        /// Platform-specific private key context (e.g., CX509CertificateRequestPkcs10 on Windows, AsymmetricCipherKeyPair on Linux/unified)
         /// </summary>
         public object? PrivateKeyContext { get; set; }
     }

@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/lib/ezcms/EZCMS.Desktop "$@"
+exec /usr/lib/EZCACertManager/EZCACertManager "$@"

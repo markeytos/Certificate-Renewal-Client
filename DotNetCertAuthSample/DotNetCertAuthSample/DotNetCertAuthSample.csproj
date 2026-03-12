@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net10.0;net10.0-windows;</TargetFrameworks>
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>EZCACertManager</AssemblyName>
@@ -30,12 +30,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.23.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="8.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.2" />
   </ItemGroup>
 
-  <ItemGroup Condition="$([MSBuild]::IsOsPlatform('Windows'))">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <PackageReference Include="Microsoft.Management.Infrastructure" Version="3.0.0" />
     <PackageReference Include="System.DirectoryServices.AccountManagement" Version="10.0.2" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.2" />
   </ItemGroup>
 </Project>

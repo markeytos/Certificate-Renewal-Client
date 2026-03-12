@@ -15,7 +15,7 @@ This application can be used in combination with Windows Task Scheduler or Linux
 This application supports both **Windows** and **Linux** platforms:
 
 - **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
-- **Linux**: Uses file-based certificate storage in `~/.ezca/certs` (user store) or `/etc/ezca/certs` (machine store)
+- **Linux**: Uses file-based certificate storage in `~/.local/share/keytos/certs` (user store) or `/etc/keytos/certs` (machine store)
 
 **Note**: Some features are Windows-specific:
 - RDP certificate configuration (requires Windows)
@@ -247,7 +247,7 @@ If you are migrating to the cloud but not all of your devices are cloud managed 
 ```powershell
 EZCACertManager.exe SCEPCertificate --help
 
-   --LocalStore          (Default: true) If the certificate should be stored in the computers Local Store. If false
+   --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
                         certificate will be stored in the user store
 
   --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1) EKUs requested for the certificate

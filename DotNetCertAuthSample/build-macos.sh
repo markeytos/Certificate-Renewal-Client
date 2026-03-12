@@ -5,6 +5,7 @@
 # TEAM_ID
 # SIGNING_IDENTITY
 # APPLE_ID
+# ENTITLEMENTS
 
 BASE_PATH="./DotNetCertAuthSample"
 CSPROJ_FILE_PATH="${BASE_PATH}/DotNetCertAuthSample.csproj"
@@ -35,9 +36,9 @@ codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 
 echo "[INFO] Submitting and stapling binary..."
 
-xcrun notarytool submit "$DMG_FILE" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
-xcrun stapler staple "$DMG_FILE"
-xcrun stapler validate "$DMG_FILE"
+xcrun notarytool submit "$BINARY_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
+xcrun stapler staple "$BINARY_PATH"
+xcrun stapler validate "$BINARY_PATH"
 
 echo "[INFO] Verifying App with GateKeeper..."
 

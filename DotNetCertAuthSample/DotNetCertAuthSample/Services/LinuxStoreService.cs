@@ -81,18 +81,16 @@ public class LinuxStoreService : IStoreService
         string? password = null
     )
     {
-        string storePath = ValidateAndGetStorePath(localStore);
         ValidatePassword(password);
-        return FindCertificates(storePath, password!, cert => true);
+        string storePath = ValidateAndGetStorePath(localStore);
+        return FindCertificates(storePath, password!, _ => true);
     }
 
     private static void ValidatePassword(string? password)
     {
         if (string.IsNullOrWhiteSpace(password))
         {
-            throw new ArgumentException(
-                "Password must be provided for template-based searches on Linux store"
-            );
+            throw new ArgumentException("Password must be provided for searches on Linux store");
         }
     }
 
@@ -161,6 +159,7 @@ public class LinuxStoreService : IStoreService
             fileInfo = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 #pragma warning disable CA1416 // Validate platform compatibility
             File.SetUnixFileMode(certPath, fileInfo);
+            File.SetUnixFileMode(passwordPath, fileInfo);
 #pragma warning restore CA1416 // Validate platform compatibility
         }
         catch (Exception e)
