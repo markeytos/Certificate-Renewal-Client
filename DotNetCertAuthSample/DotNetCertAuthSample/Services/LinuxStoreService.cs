@@ -10,9 +10,8 @@ public class LinuxStoreService : IStoreService
 
     public LinuxStoreService()
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        _userStorePath = Path.Combine(homeDir, ".local", "share", "keytos", "certs");
-
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _userStorePath = Path.Combine(homeDir, "keytos", "certs");
         CreateDirectoryIfNotExists(_userStorePath);
     }
 
@@ -210,7 +209,16 @@ public class LinuxStoreService : IStoreService
     {
         if (!Directory.Exists(path))
         {
+            if (IsRunningAsRoot())
+            {
+                throw new InvalidOperationException("Run as non-root user to write to user store");
+            }
             Directory.CreateDirectory(path);
         }
+    }
+
+    private static bool IsRunningAsRoot()
+    {
+        return string.Equals(Environment.UserName, "root", StringComparison.OrdinalIgnoreCase);
     }
 }
