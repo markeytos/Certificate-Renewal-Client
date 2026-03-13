@@ -138,7 +138,7 @@ public static class CertUtils
         return cert;
     }
 
-    private static string StoreString(bool localStore)
+    public static string StoreString(bool localStore)
     {
         if (localStore)
         {

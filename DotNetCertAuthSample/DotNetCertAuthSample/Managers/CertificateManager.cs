@@ -119,7 +119,7 @@ public class CertificateManager(
         }
         else if (_registerArgModel != null)
         {
-            response = await RegisterAndCreateCertAsync(_registerArgModel);
+            response = await RegisterDomainAsync(_registerArgModel);
         }
         else if (_createDCCertArgModel != null)
         {
@@ -161,10 +161,15 @@ public class CertificateManager(
         }
         try
         {
-            _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
+            LogInformation($"Renewing certificate for {values.Domain}");
             AssertCorrectRenewArgModel(values);
+
+            LogInformation(
+                $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)} store"
+            );
+            string domain = values.Domain!;
             X509Certificate2 cert = _certStoreService.GetCertFromStore(
-                values.Domain!.Replace("CN=", "").Trim(),
+                domain.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
                 values.template,
@@ -179,7 +184,11 @@ public class CertificateManager(
                     break;
                 }
             }
+            LogInformation(
+                $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
+            );
 
+            LogInformation($"Creating CSR for certificate");
             // Extract key usages from the existing certificate
             CsrData csrData = _certStoreService.CreateCSR(
                 cert.SubjectName.Name,
@@ -194,8 +203,7 @@ public class CertificateManager(
                 keyUsages
             );
             string csr = csrData.CsrPem;
-            _logger.LogInformation($"Renewing certificate");
-            Console.WriteLine($"Renewing certificate");
+            LogInformation($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
             _certStoreService.InstallCertificate(
@@ -204,10 +212,10 @@ public class CertificateManager(
                 values.LocalCertStore,
                 values.Password
             );
-            _logger.LogInformation($"certificate {values.Domain} was renewed successfully");
-            Console.WriteLine($"certificate {values.Domain} was renewed successfully");
+            LogInformation($"Certificate {values.Domain} was renewed successfully");
             if (values.RDPCert)
             {
+                LogInformation($"Setting RDP certificate");
                 SetRDPCertificate(
                     CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint
                 );
@@ -216,8 +224,7 @@ public class CertificateManager(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error renewing certificate {values.Domain}");
-            Console.WriteLine(ex.Message);
+            LogError(ex, $"Error renewing certificate for {values.Domain}");
             return 1;
         }
         return 0;
@@ -305,6 +312,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+        LogInformation($"Saving certificate to path {path}");
         if (inBinaryForm)
         {
             byte[] certBytes;
@@ -336,7 +344,7 @@ public class CertificateManager(
             }
             await File.WriteAllTextAsync(path, pem);
         }
-        _logger.LogInformation($"Certificate saved to {path}");
+        LogInformation($"Certificate saved to {path}");
     }
 
     private static string GetRSAPrivateKey(RSA rsaKey)
@@ -763,11 +771,7 @@ public class CertificateManager(
             ValidateSCEPArgModel(values);
             string url = values.url!;
             string password = values.SCEPPassword!;
-            _logger.LogInformation(
-                "Creating SCEP certificate for {SubjectName}",
-                values.SubjectName
-            );
-            Console.WriteLine("Creating SCEP certificate for " + values.SubjectName);
+            LogInformation($"Creating SCEP certificate for {values.SubjectName}");
             X509Certificate2 caCert = await GetScepCA(url);
             AsymmetricCipherKeyPair rsaKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
             Pkcs10CertificationRequest request = CreateCSRForScep(values, password, rsaKeyPair);
@@ -913,8 +917,7 @@ public class CertificateManager(
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error Requesting SCEP certificate");
-            Console.WriteLine("Error Requesting SCEP certificate: " + ex.Message);
+            LogError(ex, "Error Requesting SCEP certificate");
             return 1;
         }
     }
@@ -955,14 +958,22 @@ public class CertificateManager(
             .LastOrDefault(x => !IsCACertificate(x));
         if (cert == null)
         {
-            Console.WriteLine("No end-entity certificate found in the response");
+            Exception ex = new("No end-entity certificate found in the SCEP response");
+            LogError(ex);
             return 1;
         }
+
+        LogInformation(
+            $"Installing certificate with subject {cert.Subject} to {CertUtils.StoreString(localStore)}"
+        );
         RSA rsaPrivateKey = CertUtils.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)rsaKeyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
         _certStoreService.InstallCertificateWithPrivateKey(cert, localStore, password);
+        LogInformation(
+            $"Certificate installed successfully in {CertUtils.StoreString(localStore)} with thumbprint {cert.Thumbprint}"
+        );
         await CheckAndSaveCertificateToPathAsync(cert, path, password);
         return 0;
     }
@@ -1138,7 +1149,7 @@ public class CertificateManager(
         return SystemInfoUtils.GetFQDN(computerName);
     }
 
-    private async Task<int> RegisterAndCreateCertAsync(RegisterArgModel values)
+    private async Task<int> RegisterDomainAsync(RegisterArgModel values)
     {
         if (_logger == null)
         {
@@ -1148,28 +1159,24 @@ public class CertificateManager(
         {
             ValidateRegisterArgModel(values);
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
-            _logger.LogInformation("Getting available CAs");
-            Console.WriteLine("Getting available CAs");
+            LogInformation("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
+            LogInformation($"Registering domain: {values.Domain}");
             APIResultModel registrationResult = await ezcaClient.RegisterDomainAsync(
                 selectedCA,
                 values.Domain!
             );
-            _logger.LogInformation($"Registering domain: {values.Domain}");
-            Console.WriteLine($"Registering domain: {values.Domain}");
             if (!registrationResult.Success)
             {
                 throw new InvalidOperationException(
                     $"Could not register new domain in EZCA {registrationResult.Message}"
                 );
             }
-            _logger.LogInformation($"Successfully registered domain: {values.Domain}");
-            Console.WriteLine($"Successfully registered domain: {values.Domain}");
+            LogInformation($"Successfully registered domain: {values.Domain}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error registering domain: " + ex.Message);
-            _logger.LogError(ex, "Error registering domain");
+            LogError(ex, "Error registering domain");
             return 1;
         }
         return 0;
@@ -1183,7 +1190,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = CertificateManager.GetFQDN();
+            values.Domain = GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -1247,6 +1254,7 @@ public class CertificateManager(
         {
             subjectName = "CN=" + subjectName;
         }
+        LogInformation($"Creating CSR with subject name {subjectName}");
         CsrData csrData = _certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
@@ -1259,9 +1267,7 @@ public class CertificateManager(
         X509Certificate2? cert;
         if (dcCertificate)
         {
-            string message = $"Getting Domain Controller certificate for {domain}";
-            _logger.LogInformation(message);
-            Console.WriteLine(message);
+            LogInformation($"Getting Domain Controller certificate for {domain}");
             cert = await ezcaClient.RequestDCCertificateAsync(
                 selectedCA,
                 csr,
@@ -1274,28 +1280,24 @@ public class CertificateManager(
         }
         else
         {
-            string message = $"Getting certificate for {domain}";
-            _logger.LogInformation(message);
-            Console.WriteLine(message);
+            LogInformation($"Getting certificate for {domain}");
             cert = await ezcaClient.RequestCertificateAsync(selectedCA, csr, domain, validity);
         }
 
         if (cert != null)
         {
-            string message =
-                $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}";
-            _logger.LogInformation(message);
-            Console.WriteLine(message);
+            LogInformation(
+                $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}"
+            );
             _certStoreService.InstallCertificate(
                 CryptoStaticService.ExportToPEM(cert),
                 csrData,
                 localStore,
                 password
             );
-            message =
-                $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}";
-            _logger.LogInformation(message);
-            Console.WriteLine(message);
+            LogInformation(
+                $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}"
+            );
             await CheckAndSaveCertificateToPath(
                 CryptoStaticService.ExportToPEM(cert),
                 csrData,
@@ -1467,5 +1469,23 @@ public class CertificateManager(
         }
 
         return subjectAlternativeNames;
+    }
+
+    private void LogInformation(string message)
+    {
+        ArgumentNullException.ThrowIfNull(_logger);
+        _logger.LogInformation(message);
+        Console.WriteLine(message);
+    }
+
+    private void LogError(Exception ex, string? message = null)
+    {
+        ArgumentNullException.ThrowIfNull(_logger);
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            message = ex.Message;
+        }
+        _logger.LogError(ex, message);
+        Console.WriteLine($"{message}: {ex}");
     }
 }
