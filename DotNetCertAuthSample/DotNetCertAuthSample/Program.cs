@@ -19,7 +19,7 @@ public class Program
         {
 #if WINDOWS
             storeService = new UnifiedStoreService();
-            certStoreService = new WindowsCertStoreService(storeService);
+            certStoreService = new WindowsCertService(storeService);
             systemInfoService = new WindowsSystemInfoService();
 #else
             Console.WriteLine("Windows-specific services not available");
@@ -29,13 +29,13 @@ public class Program
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             storeService = new LinuxStoreService();
-            certStoreService = new UnifiedCertService(storeService);
+            certStoreService = new UnifiedCertStoreService(storeService);
             systemInfoService = new UnifiedSystemInfoService();
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             storeService = new UnifiedStoreService();
-            certStoreService = new UnifiedCertService(storeService);
+            certStoreService = new UnifiedCertStoreService(storeService);
             systemInfoService = new UnifiedSystemInfoService();
         }
         else

@@ -30,4 +30,3 @@ public class UnifiedSystemInfoService : ISystemInfoService
         throw new NotSupportedException("RDP is only available on Windows");
     }
 }
-

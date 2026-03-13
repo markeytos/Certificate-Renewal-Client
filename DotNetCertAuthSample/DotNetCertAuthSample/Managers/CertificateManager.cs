@@ -335,7 +335,7 @@ public class CertificateManager(
         {
             if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
             {
-                AsnEncodedData asnData = new AsnEncodedData(extension.Oid, extension.RawData);
+                AsnEncodedData asnData = new(extension.Oid, extension.RawData);
                 return asnData.Format(true);
             }
         }
@@ -398,7 +398,7 @@ public class CertificateManager(
         X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
         if (includePrivateKey)
         {
-            certToExport = UnifiedCertService.CopyPrivateKeyFromCsr(createdCert, csrData);
+            certToExport = CertUtils.CopyPrivateKeyFromCsr(createdCert, csrData);
         }
 
         await WriteCertificateToFileAsync(
@@ -429,7 +429,7 @@ public class CertificateManager(
             byte[] certBytes;
             if (includePrivateKey)
             {
-                password = UnifiedCertService.GetOrGeneratePasswordForCert(password);
+                password = CertUtils.GetOrGeneratePasswordForCert(password);
                 certBytes = certToExport.Export(X509ContentType.Pfx, password);
                 await File.WriteAllTextAsync(passwordPath, password);
                 _logger.LogInformation($"Certificate private key password saved to {passwordPath}");
@@ -576,21 +576,21 @@ public class CertificateManager(
         return path;
     }
 
-    private bool IsBinaryCertificateFormat(string path)
+    private static bool IsBinaryCertificateFormat(string path)
     {
         return Path.GetExtension(path).ToLower() switch
         {
             ".pem" => false,
             ".pfx" => true,
             ".p12" => true,
-            ".cer" => true,
-            ".crt" => true,
+            ".cer" => false,
+            ".crt" => false,
             ".der" => true,
             _ => false,
         };
     }
 
-    private bool ShouldIncludePrivateKey(string path)
+    private static bool ShouldIncludePrivateKey(string path)
     {
         return Path.GetExtension(path).ToLower() switch
         {
@@ -604,7 +604,7 @@ public class CertificateManager(
         };
     }
 
-    private bool IsValidCertificatePathExtension(string path)
+    private static bool IsValidCertificatePathExtension(string path)
     {
         return Path.GetExtension(path).ToLower() switch
         {
@@ -733,7 +733,7 @@ public class CertificateManager(
         {
             path += ".pfx";
         }
-        if (!IsValidCertificatePathExtension(path))
+        if (!CertificateManager.IsValidCertificatePathExtension(path))
         {
             throw new ArgumentException(
                 "Invalid certificate file extension, valid extensions are (.pem, .pfx, .p12, .cer, .crt, .der)"
@@ -880,18 +880,16 @@ public class CertificateManager(
         try
         {
             ValidateSCEPArgModel(values);
+            string url = values.url!;
+            string password = values.Password!;
             _logger.LogInformation(
                 "Creating SCEP certificate for {SubjectName}",
                 values.SubjectName
             );
             Console.WriteLine("Creating SCEP certificate for " + values.SubjectName);
-            X509Certificate2 caCert = await GetScepCA(values.url);
+            X509Certificate2 caCert = await GetScepCA(url);
             AsymmetricCipherKeyPair rsaKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
-            Pkcs10CertificationRequest request = CreateCSRForScep(
-                values,
-                values.SCEPPassword,
-                rsaKeyPair
-            );
+            Pkcs10CertificationRequest request = CreateCSRForScep(values, password, rsaKeyPair);
             return await RequestSCEPCertificateAsync(caCert, rsaKeyPair, request, values);
         }
         catch (Exception ex)
@@ -1079,7 +1077,7 @@ public class CertificateManager(
             Console.WriteLine("No end-entity certificate found in the response");
             return 1;
         }
-        RSA rsaPrivateKey = UnifiedCertService.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = CertUtils.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)rsaKeyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
@@ -1134,7 +1132,7 @@ public class CertificateManager(
         X509Certificate2 cert = X509CertificateLoader.LoadCertificate(
             bouncyCastleCert.GetEncoded()
         );
-        RSA rsaPrivateKey = UnifiedCertService.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = CertUtils.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)keyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);

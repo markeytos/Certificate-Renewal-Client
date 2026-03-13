@@ -12,40 +12,16 @@ This application can be used in combination with Windows Task Scheduler or Linux
 
 ## Platform Support
 
-This application supports both **Windows** and **Linux** platforms:
+This application supports **Windows**, **Mac**, **Linux** platforms:
 
 - **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
 - **Linux**: Uses file-based certificate storage in `~/.local/share/keytos/certs` (user store) or `/etc/keytos/certs` (machine store)
+- **Mac**: Uses Mac Keychain Access
 
 **Note**: Some features are Windows-specific:
 - RDP certificate configuration (requires Windows)
 - Domain Controller certificate features (requires Active Directory)
 - Windows Certificate Store integration
-
-On Linux, certificates are stored as PFX files in the file system with appropriate permissions.
-
-## Building from Source
-
-To build the application from source:
-
-### Prerequisites
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
-
-### Build Instructions
-
-```bash
-# Clone the repository
-git clone https://github.com/markeytos/Certificate-Renewal-Client.git
-cd Certificate-Renewal-Client/DotNetCertAuthSample
-
-# Build the project
-dotnet build
-
-# Run the application
-dotnet run --project DotNetCertAuthSample
-```
-
-The application will automatically detect the platform (Windows or Linux) and use the appropriate certificate storage and system APIs.
 
 ## Download Signed Binary
 

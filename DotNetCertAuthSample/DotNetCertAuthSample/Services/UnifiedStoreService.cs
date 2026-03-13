@@ -85,9 +85,6 @@ public class UnifiedStoreService : IStoreService
 
     public static X509Store GetCertStore(bool localStore)
     {
-        return new X509Store(
-            StoreName.My,
-            localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser
-        );
+        return new X509Store(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
     }
 }

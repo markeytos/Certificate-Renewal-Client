@@ -9,7 +9,7 @@ using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyU
 
 namespace DotNetCertAuthSample.Services;
 
-public class WindowsCertStoreService(IStoreService storeService) : ICertStoreService
+public class WindowsCertService(IStoreService storeService) : ICertStoreService
 {
     public CsrData CreateCSR(
         string subjectName,
@@ -111,13 +111,22 @@ public class WindowsCertStoreService(IStoreService storeService) : ICertStoreSer
         string? password = null
     )
     {
+        certificate = LoadPrivateKeyToStore(certificate, localStore);
+        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+    }
+
+    private static X509Certificate2 LoadPrivateKeyToStore(
+        X509Certificate2 certificate,
+        bool localStore
+    )
+    {
         string tempPassword = "password"; // not used, just adds private key back to store after it was copied and lost
-        var pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
+        byte[] pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
         X509KeyStorageFlags flags = localStore
             ? X509KeyStorageFlags.MachineKeySet
             : X509KeyStorageFlags.UserKeySet;
         certificate = X509CertificateLoader.LoadPkcs12(pfx, tempPassword, flags);
-        storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+        return certificate;
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)

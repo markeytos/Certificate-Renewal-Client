@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DotNetCertAuthSample.Services;
@@ -14,7 +13,7 @@ public class LinuxStoreService : IStoreService
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _userStorePath = Path.Combine(homeDir, ".local", "share", "keytos", "certs");
 
-        UnifiedCertService.CreateDirectoryIfNotExists(_userStorePath);
+        CreateDirectoryIfNotExists(_userStorePath);
     }
 
     public X509Certificate2Collection FindCertificatesBySubject(
@@ -135,7 +134,7 @@ public class LinuxStoreService : IStoreService
         }
 
         string storePath = GetStorePath(localStore);
-        UnifiedCertService.CreateDirectoryIfNotExists(storePath);
+        CreateDirectoryIfNotExists(storePath);
 
         string certFilename = GetFileNameFromCertificate(certificate);
         string certPath = Path.Combine(storePath, certFilename);
@@ -143,7 +142,7 @@ public class LinuxStoreService : IStoreService
         string passwordFileName = GetPasswordFileNameFromCertificate(certificate);
         string passwordPath = Path.Combine(storePath, passwordFileName);
 
-        password = UnifiedCertService.GetOrGeneratePasswordForCert(password);
+        password = CertUtils.GetOrGeneratePasswordForCert(password);
         byte[] certBytes = certificate.Export(X509ContentType.Pfx, password);
 
         File.WriteAllBytes(certPath, certBytes);
@@ -205,5 +204,13 @@ public class LinuxStoreService : IStoreService
             return "local store";
         }
         return "user store";
+    }
+
+    public static void CreateDirectoryIfNotExists(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
     }
 }
