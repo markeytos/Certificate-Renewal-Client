@@ -550,8 +550,7 @@ public class CertificateManager(
                 values.url,
                 CreateTokenCredential(values.ClientID, values.ClientSecret, values.TenantID)
             );
-            _logger.LogInformation("Getting available CAs");
-            Console.WriteLine("Getting available CAs");
+            LogInformation($"Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
             List<string> ekus =
             [
