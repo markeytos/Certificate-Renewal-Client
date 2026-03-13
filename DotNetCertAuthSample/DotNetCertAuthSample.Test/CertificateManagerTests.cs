@@ -70,6 +70,7 @@ public class CertificateManagerTests
             caID = TestConfig.SslCaId,
             Validity = 30,
             LocalCertStore = false,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(createUserArgs);
         int result = await manager.CallCertActionAsync();
@@ -89,6 +90,7 @@ public class CertificateManagerTests
             caID = TestConfig.SslCaId,
             Validity = 30,
             LocalCertStore = true,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(createMachineArgs);
         int result = await manager.CallCertActionAsync();
@@ -108,12 +110,18 @@ public class CertificateManagerTests
             caID = TestConfig.SslCaId,
             Validity = 30,
             LocalCertStore = false,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(createUserArgs);
         int result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
 
-        RenewArgModel renewUserArgs = new() { Domain = domainUser, LocalCertStore = false };
+        RenewArgModel renewUserArgs = new()
+        {
+            Domain = domainUser,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
         manager.InitializeManager(renewUserArgs);
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
@@ -132,12 +140,18 @@ public class CertificateManagerTests
             caID = TestConfig.SslCaId,
             Validity = 30,
             LocalCertStore = true,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(createMachineArgs);
         int result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
 
-        RenewArgModel renewMachineArgs = new() { Domain = domainMachine, LocalCertStore = true };
+        RenewArgModel renewMachineArgs = new()
+        {
+            Domain = domainMachine,
+            LocalCertStore = true,
+            Password = TestConfig.CertPassword,
+        };
         manager.InitializeManager(renewMachineArgs);
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
@@ -158,6 +172,7 @@ public class CertificateManagerTests
             caID = TestConfig.ScepCaId,
             TemplateID = TestConfig.ScepTemplateId,
             Validity = 30,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(createDcArgs);
         int result = await manager.CallCertActionAsync();
@@ -179,6 +194,7 @@ public class CertificateManagerTests
             SCEPPassword = TestConfig.ScepPassword,
             SubjectAltNames = scepSans,
             LocalCertStore = false,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(scepUserArgs);
         int result = await manager.CallCertActionAsync();
@@ -200,6 +216,7 @@ public class CertificateManagerTests
             SCEPPassword = TestConfig.ScepPassword,
             SubjectAltNames = scepSans,
             LocalCertStore = true,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(scepMachineArgs);
         int result = await manager.CallCertActionAsync();
@@ -221,6 +238,7 @@ public class CertificateManagerTests
             SCEPPassword = TestConfig.ScepPassword,
             SubjectAltNames = scepSans,
             LocalCertStore = false,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(scepUserArgs);
         int result = await manager.CallCertActionAsync();
@@ -230,6 +248,7 @@ public class CertificateManagerTests
         {
             Domain = scepSubjectUser,
             LocalCertStore = false,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(renewScepUserArgs);
         result = await manager.CallCertActionAsync();
@@ -260,6 +279,7 @@ public class CertificateManagerTests
         {
             Domain = scepSubjectMachine,
             LocalCertStore = true,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(renewScepMachineArgs);
         result = await manager.CallCertActionAsync();

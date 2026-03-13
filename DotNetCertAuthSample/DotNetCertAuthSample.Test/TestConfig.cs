@@ -12,6 +12,8 @@ internal static class TestConfig
 
     public static string ScepPassword => GetRequired("EZCA_SCEP_PASSWORD");
 
+    public static string CertPassword => GetOptional("CERT_PASSWORD");
+
     private static string GetRequired(string name)
     {
         string? value = Environment.GetEnvironmentVariable(name);
@@ -20,5 +22,10 @@ internal static class TestConfig
             throw new Exception($"Environment variable {name} must be provided");
         }
         return value;
+    }
+
+    private static string? GetOptional(string name)
+    {
+        return Environment.GetEnvironmentVariable(name);
     }
 }
