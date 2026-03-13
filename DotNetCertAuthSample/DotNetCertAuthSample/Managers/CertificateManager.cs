@@ -321,7 +321,7 @@ public class CertificateManager(
                 password = CertUtils.GetOrGeneratePasswordForCert(password);
                 certBytes = certToExport.Export(X509ContentType.Pfx, password);
                 await File.WriteAllTextAsync(passwordPath, password);
-                _logger.LogInformation($"Certificate private key password saved to {passwordPath}");
+                LogInformation($"Certificate private key password saved to {passwordPath}");
             }
             else
             {
@@ -580,8 +580,7 @@ public class CertificateManager(
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error creating certificate: " + ex.Message);
-            _logger.LogError(ex, "Error creating certificate");
+            LogError(ex, "Error creating certificate for " + values.Domain);
             return 1;
         }
         return 0;
