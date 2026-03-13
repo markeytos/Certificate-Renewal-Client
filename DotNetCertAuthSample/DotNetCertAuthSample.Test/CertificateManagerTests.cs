@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using DotNetCertAuthSample.Managers;
 using DotNetCertAuthSample.Models;
 using DotNetCertAuthSample.Services;
@@ -59,6 +61,26 @@ public class CertificateManagerTests
 
     [Fact]
     [Trait("Privilege", "User")]
+    public async Task Register_Domain_EU_Instance_WithAppInsights()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        RegisterArgModel registerArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            url = "https://eu.ezca.io",
+            AppInsightsKey = TestConfig.AppInsights,
+        };
+
+        manager.InitializeManager(registerArgs);
+        int result = await manager.CallCertActionAsync(); // ca does not exist in eu
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
     public async Task Create_User_Certificate_UserStore()
     {
         CertificateManager manager = CreateManager();
@@ -75,6 +97,86 @@ public class CertificateManagerTests
         manager.InitializeManager(createUserArgs);
         int result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
+    }
+
+    private static string GetRandomPassword()
+    {
+        const string alphanumericCharacters =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
+    }
+
+    [Theory]
+    [Trait("Privilege", "User")]
+    [InlineData("./my-cert", "./my-cert.pfx", true)]
+    [InlineData("./my-cert.pfx", "./my-cert.pfx", true)]
+    [InlineData("./my-cert.p12", "./my-cert.p12", true)]
+    [InlineData("./my-cert.pem", "./my-cert.pem", false)]
+    [InlineData("./my-cert.cer", "./my-cert.cer", false)]
+    [InlineData("./my-cert.crt", "./my-cert.crt", false)]
+    public async Task Create_User_Certificate_UserStore_Save_To_Path(
+        string path,
+        string expectedPath,
+        bool includePrivateKey
+    )
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+        string password = GetRandomPassword();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Path = path,
+            Password = password,
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+        AssertCorrectCertificateFile(expectedPath, includePrivateKey, password);
+        DeleteCertificateFiles(path);
+    }
+
+    private static void AssertCorrectCertificateFile(
+        string expectedFilePath,
+        bool includePrivateKey,
+        string? password
+    )
+    {
+        Assert.True(File.Exists(expectedFilePath));
+        X509Certificate2? cert;
+        if (includePrivateKey)
+        {
+            cert = X509CertificateLoader.LoadPkcs12FromFile(expectedFilePath, password);
+            Assert.True(cert.HasPrivateKey);
+        }
+        else
+        {
+            cert = X509CertificateLoader.LoadCertificateFromFile(expectedFilePath);
+            Assert.False(cert.HasPrivateKey);
+        }
+    }
+
+    private static void DeleteCertificateFiles(string path)
+    {
+        string[] files = Directory.GetFiles(
+            Path.GetDirectoryName(path) ?? ".",
+            $"{Path.GetFileNameWithoutExtension(path)}*"
+        );
+        foreach (string file in files)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch
+            {
+                continue;
+            }
+        }
     }
 
     [Fact]

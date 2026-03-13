@@ -12,7 +12,9 @@ internal static class TestConfig
 
     public static string ScepPassword => GetRequired("EZCA_SCEP_PASSWORD");
 
-    public static string CertPassword => GetOptional("CERT_PASSWORD");
+    public static string? CertPassword => GetOptional("CERT_PASSWORD");
+
+    public static string? AppInsights => GetOptional("APP_INSIGHTS_INSTRUMENTATION_KEY");
 
     private static string GetRequired(string name)
     {
