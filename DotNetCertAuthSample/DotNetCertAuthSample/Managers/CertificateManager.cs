@@ -286,7 +286,7 @@ public class CertificateManager(
         X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
         if (includePrivateKey)
         {
-            certToExport = CertUtils.CopyPrivateKeyFromCsr(createdCert, csrData);
+            certToExport = CertUtils.CopyPrivateKeyFromCsr(_certStoreService, createdCert, csrData);
         }
 
         await WriteCertificateToFileAsync(
@@ -597,7 +597,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = CertificateManager.GetFQDN();
+            values.Domain = GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -620,7 +620,7 @@ public class CertificateManager(
         {
             path += ".pfx";
         }
-        if (!CertificateManager.IsValidCertificatePathExtension(path))
+        if (!IsValidCertificatePathExtension(path))
         {
             throw new ArgumentException(
                 "Invalid certificate file extension, valid extensions are (.pem, .pfx, .p12, .cer, .crt, .der)"
@@ -735,7 +735,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = CertificateManager.GetFQDN();
+            values.Domain = GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -964,7 +964,7 @@ public class CertificateManager(
         LogInformation(
             $"Installing certificate with subject {cert.Subject} to {CertUtils.StoreString(localStore)}"
         );
-        RSA rsaPrivateKey = CertUtils.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = _certStoreService.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)rsaKeyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
@@ -983,7 +983,7 @@ public class CertificateManager(
         return isCA;
     }
 
-    private static X509Certificate2 GenerateSelfSignedCertificate(
+    private X509Certificate2 GenerateSelfSignedCertificate(
         AsymmetricCipherKeyPair keyPair,
         string subjectName,
         int validDays = 2
@@ -1022,7 +1022,7 @@ public class CertificateManager(
         X509Certificate2 cert = X509CertificateLoader.LoadCertificate(
             bouncyCastleCert.GetEncoded()
         );
-        RSA rsaPrivateKey = CertUtils.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = _certStoreService.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)keyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);

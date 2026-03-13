@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Org.BouncyCastle.Asn1;
@@ -5,6 +6,7 @@ using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Prng;
 using Org.BouncyCastle.OpenSsl;
 using Org.BouncyCastle.Pkcs;
@@ -47,7 +49,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         string? password = null
     )
     {
-        X509Certificate2 certificate = CertUtils.CopyPrivateKeyFromCsr(cert, csrData);
+        X509Certificate2 certificate = CertUtils.CopyPrivateKeyFromCsr(this, cert, csrData);
         InstallCertificateWithPrivateKey(certificate, localStore, password);
     }
 
@@ -76,6 +78,25 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
             templateName,
             password
         );
+    }
+
+    public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters key)
+    {
+        RSAParameters rsaParams = new()
+        {
+            Modulus = key.Modulus?.ToByteArrayUnsigned(),
+            Exponent = key.PublicExponent?.ToByteArrayUnsigned(),
+            D = key.Exponent?.ToByteArrayUnsigned(),
+            P = key.P?.ToByteArrayUnsigned(),
+            Q = key.Q.ToByteArrayUnsigned(),
+            DP = key.DP.ToByteArrayUnsigned(),
+            DQ = key.DQ.ToByteArrayUnsigned(),
+            InverseQ = key.QInv.ToByteArrayUnsigned(),
+        };
+
+        RSA rsa = RSA.Create();
+        rsa.ImportParameters(rsaParams);
+        return rsa;
     }
 
     private static string ExportCSRToPem(Pkcs10CertificationRequest pkcs10)

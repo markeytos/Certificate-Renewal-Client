@@ -4,6 +4,8 @@ using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 
@@ -113,6 +115,11 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
     {
         certificate = LoadPrivateKeyToStore(certificate, localStore);
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+    }
+
+    public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams)
+    {
+        return DotNetUtilities.ToRSA(rsaParams);
     }
 
     public X509Certificate2 GetCertFromStore(

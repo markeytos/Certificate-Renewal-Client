@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Crypto.Parameters;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -13,6 +15,8 @@ public interface ICertStoreService
         string keyProvider = "",
         X509KeyUsageFlags? keyUsageFlags = null
     );
+
+    RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams);
 
     void InstallCertificate(string cert, CsrData csrData, bool localStore, string? password = null);
 
