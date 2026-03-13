@@ -115,6 +115,24 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
+    public X509Certificate2 GetCertFromStore(
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = "",
+        string? password = null
+    )
+    {
+        return CertUtils.GetCertFromStore(
+            storeService,
+            subjectName,
+            localStore,
+            issuerName,
+            templateName,
+            password
+        );
+    }
+
     private static X509Certificate2 LoadPrivateKeyToStore(
         X509Certificate2 certificate,
         bool localStore

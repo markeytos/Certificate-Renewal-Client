@@ -21,4 +21,12 @@ public interface ICertStoreService
         bool localStore,
         string? password = null
     );
+
+    public X509Certificate2 GetCertFromStore(
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = "",
+        string? password = null
+    );
 }

@@ -30,4 +30,3 @@ public interface IStoreService
         string? password = null
     );
 }
-

@@ -9,32 +9,14 @@ namespace DotNetCertAuthSample.Services;
 
 public class WindowsSystemInfoService : ISystemInfoService
 {
-    public string GetFQDN(string computerName = "")
-    {
-        // Get the host entry for the local computer.
-        if (string.IsNullOrWhiteSpace(computerName))
-        {
-            computerName = Dns.GetHostName();
-        }
-        var hostEntry = Dns.GetHostEntry(computerName);
-
-        // Return the first DNS name assigned to this address (should be the FQDN).
-        return hostEntry.HostName;
-    }
-
     public string? GetComputerDistinguishedName(string computerName)
     {
-        // set up domain context
         try
         {
-            var context = new PrincipalContext(ContextType.Domain);
-
-            // find computer
+            PrincipalContext context = new(ContextType.Domain);
             var computer = ComputerPrincipal.FindByIdentity(context, computerName);
-
             if (computer != null)
             {
-                // get the Distinguished Name
                 return computer.DistinguishedName;
             }
         }
@@ -43,17 +25,6 @@ public class WindowsSystemInfoService : ISystemInfoService
             Console.WriteLine("Error getting computer distinguished name " + e.Message);
         }
         return null;
-    }
-
-    public string GetComputerSubjectName()
-    {
-        string computerName = Dns.GetHostName();
-        string? distinguishedName = GetComputerDistinguishedName(computerName);
-        if (!string.IsNullOrWhiteSpace(distinguishedName))
-        {
-            return distinguishedName;
-        }
-        return GetFQDN(computerName);
     }
 
     public void SetRDPCertificate(string thumbprint)

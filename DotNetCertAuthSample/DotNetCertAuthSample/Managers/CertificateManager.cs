@@ -37,8 +37,7 @@ namespace DotNetCertAuthSample.Managers;
 
 public class CertificateManager(
     ICertStoreService certStoreService,
-    ISystemInfoService systemInfoService,
-    IStoreService storeService
+    ISystemInfoService systemInfoService
 )
 {
     private ILogger? _logger;
@@ -52,7 +51,6 @@ public class CertificateManager(
     private TelemetryClient? _telemetryClient;
     private readonly ICertStoreService _certStoreService = certStoreService;
     private readonly ISystemInfoService _systemInfoService = systemInfoService;
-    private readonly IStoreService _storeService = storeService;
 
     public int InitializeManager(RenewArgModel values)
     {
@@ -148,7 +146,7 @@ public class CertificateManager(
         Console.WriteLine(
             "This is a test method to validate that everything is working fine. It will try to find a certificate with subject CN=localhost in the user store."
         );
-        X509Certificate2 certificate = GetCertFromStoreBySubject("localhost", true);
+        X509Certificate2 certificate = _certStoreService.GetCertFromStore("localhost", true);
         Console.WriteLine($"Found certificate: {certificate.Subject}");
         Console.WriteLine($"Found certificate: {certificate.NotAfter}");
         Console.WriteLine("Test completed successfully");
@@ -165,7 +163,7 @@ public class CertificateManager(
         {
             _logger.LogInformation("Renewing certificate for {Domain}", values.Domain);
             AssertCorrectRenewArgModel(values);
-            X509Certificate2 cert = GetCertFromStoreBySubject(
+            X509Certificate2 cert = _certStoreService.GetCertFromStore(
                 values.Domain!.Replace("CN=", "").Trim(),
                 values.LocalCertStore,
                 values.issuer,
@@ -223,123 +221,6 @@ public class CertificateManager(
             return 1;
         }
         return 0;
-    }
-
-    public X509Certificate2 GetCertFromStoreBySubject(
-        string subjectName,
-        bool localStore,
-        string issuerName = "",
-        string templateName = "",
-        string? password = null
-    )
-    {
-        X509Certificate2Collection certs = _storeService.FindCertificatesBySubject(
-            subjectName,
-            localStore,
-            password
-        );
-        X509Certificate2? cert = null;
-        if (certs.Count > 0)
-        {
-            if (!string.IsNullOrWhiteSpace(templateName))
-            {
-                cert = _storeService
-                    .FindCertificatesByTemplate(templateName, localStore, password)
-                    .FirstOrDefault();
-            }
-            else if (!string.IsNullOrWhiteSpace(issuerName))
-            {
-                cert = _storeService
-                    .FindCertificatesByIssuer(issuerName, localStore, password)
-                    .FirstOrDefault();
-            }
-            cert ??=
-                certs
-                    .OrderByDescending(x => x.NotAfter)
-                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
-                ?? certs.OrderByDescending(x => x.NotAfter).First();
-        }
-        else
-        {
-            List<X509Certificate2> matchingCertificates = [];
-            X509Certificate2Collection allStoreCertificates =
-                _storeService.GetAllCertificatesInStore(localStore, password);
-            foreach (
-                X509Certificate2 storeCert in allStoreCertificates.OrderByDescending(i =>
-                    i.NotAfter
-                )
-            )
-            {
-                if (
-                    CheckCertificateTemplate(storeCert, templateName)
-                    && CheckCertificateIssuer(storeCert, issuerName)
-                    && storeCert.Subject.Contains(subjectName)
-                )
-                {
-                    matchingCertificates.Add(storeCert);
-                }
-            }
-            if (matchingCertificates.Count == 1)
-            {
-                cert = matchingCertificates[0];
-            }
-            else if (matchingCertificates.Count > 1)
-            {
-                cert =
-                    matchingCertificates
-                        .OrderByDescending(x => x.NotAfter)
-                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
-                    ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
-            }
-        }
-        if (cert == null)
-        {
-            throw new FileNotFoundException(
-                $"Could not find certificate for domain {subjectName} in {StoreString(localStore)}"
-            );
-        }
-        return cert;
-    }
-
-    private static string StoreString(bool localStore)
-    {
-        if (localStore)
-        {
-            return "local store";
-        }
-        return "user store";
-    }
-
-    public static bool CheckCertificateTemplate(X509Certificate2 cert, string templateName)
-    {
-        if (string.IsNullOrWhiteSpace(templateName))
-        {
-            return true;
-        }
-        string? certTemplateName = GetCertificateTemplateName(cert);
-        return templateName.Equals(certTemplateName?.Trim());
-    }
-
-    public static bool CheckCertificateIssuer(X509Certificate2 cert, string issuerName)
-    {
-        if (string.IsNullOrWhiteSpace(issuerName))
-        {
-            return true;
-        }
-        return cert.Issuer.Contains(issuerName);
-    }
-
-    private static string? GetCertificateTemplateName(X509Certificate2 certificate)
-    {
-        foreach (var extension in certificate.Extensions)
-        {
-            if (extension.Oid?.Value == "1.3.6.1.4.1.311.20.2")
-            {
-                AsnEncodedData asnData = new(extension.Oid, extension.RawData);
-                return asnData.Format(true);
-            }
-        }
-        return null;
     }
 
     private async Task CheckAndSaveCertificateToPathAsync(
@@ -710,7 +591,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = GetFQDN();
+            values.Domain = CertificateManager.GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -848,7 +729,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = GetFQDN();
+            values.Domain = CertificateManager.GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));
@@ -906,7 +787,7 @@ public class CertificateManager(
         AssertCertificatePathProperties(values.Path);
         if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
         {
-            values.SubjectAltNames = GetFQDN();
+            values.SubjectAltNames = CertificateManager.GetFQDN();
             if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
             {
                 throw new ArgumentNullException(nameof(values.SubjectAltNames));
@@ -1249,12 +1130,12 @@ public class CertificateManager(
 
     private string GetComputerSubjectName()
     {
-        return _systemInfoService.GetComputerSubjectName();
+        return SystemInfoUtils.GetComputerSubjectName(_systemInfoService);
     }
 
-    private string GetFQDN(string computerName = "")
+    private static string GetFQDN(string computerName = "")
     {
-        return _systemInfoService.GetFQDN(computerName);
+        return SystemInfoUtils.GetFQDN(computerName);
     }
 
     private async Task<int> RegisterAndCreateCertAsync(RegisterArgModel values)
@@ -1302,7 +1183,7 @@ public class CertificateManager(
         }
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
-            values.Domain = GetFQDN();
+            values.Domain = CertificateManager.GetFQDN();
             if (string.IsNullOrWhiteSpace(values.Domain))
             {
                 throw new ArgumentNullException(nameof(values.Domain));

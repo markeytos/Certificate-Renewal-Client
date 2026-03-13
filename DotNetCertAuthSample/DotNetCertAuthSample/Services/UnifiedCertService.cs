@@ -60,6 +60,24 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
+    public X509Certificate2 GetCertFromStore(
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = "",
+        string? password = null
+    )
+    {
+        return CertUtils.GetCertFromStore(
+            storeService,
+            subjectName,
+            localStore,
+            issuerName,
+            templateName,
+            password
+        );
+    }
+
     private static string ExportCSRToPem(Pkcs10CertificationRequest pkcs10)
     {
         StringBuilder csrPemBuilder = new();
