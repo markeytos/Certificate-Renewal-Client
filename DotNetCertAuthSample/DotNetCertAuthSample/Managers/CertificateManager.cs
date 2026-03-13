@@ -762,7 +762,7 @@ public class CertificateManager(
         {
             ValidateSCEPArgModel(values);
             string url = values.url!;
-            string password = values.Password!;
+            string password = values.SCEPPassword!;
             _logger.LogInformation(
                 "Creating SCEP certificate for {SubjectName}",
                 values.SubjectName
@@ -787,7 +787,7 @@ public class CertificateManager(
         AssertCertificatePathProperties(values.Path);
         if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
         {
-            values.SubjectAltNames = CertificateManager.GetFQDN();
+            values.SubjectAltNames = GetFQDN();
             if (string.IsNullOrWhiteSpace(values.SubjectAltNames))
             {
                 throw new ArgumentNullException(nameof(values.SubjectAltNames));
