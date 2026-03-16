@@ -5,7 +5,6 @@
 # TEAM_ID
 # SIGNING_IDENTITY
 # APPLE_ID
-# ENTITLEMENTS
 
 BASE_PATH="./DotNetCertAuthSample"
 CSPROJ_FILE_PATH="${BASE_PATH}/DotNetCertAuthSample.csproj"
@@ -13,6 +12,7 @@ CSPROJ_FILE_PATH="${BASE_PATH}/DotNetCertAuthSample.csproj"
 RELEASE_PATH="${BASE_PATH}/bin/Release"
 PUBLISH_OUTPUT_DIRECTORY="${RELEASE_PATH}/net10.0/osx-arm64/publish/"
 BINARY_PATH="${PUBLISH_OUTPUT_DIRECTORY}/EZCACertManager"
+ZIP_PATH="${PUBLISH_OUTPUT_DIRECTORY}/EZCACertManager.zip"
 ENTITLEMENTS="./EZCACertManager.entitlements"
 
 set -eou pipefail
@@ -36,9 +36,12 @@ echo "[INFO] Verifying binary..."
 codesign --verify --verbose=4 "$BINARY_PATH"
 codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 
-echo "[INFO] Submitting and stapling binary..."
+echo "[INFO] Creating zip for notarization..."
+zip -j "$ZIP_PATH" "$BINARY_PATH"
 
-xcrun notarytool submit "$BINARY_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
+echo "[INFO] Submitting zip and stapling binary..."
+
+xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
 xcrun stapler staple "$BINARY_PATH"
 xcrun stapler validate "$BINARY_PATH"
 
