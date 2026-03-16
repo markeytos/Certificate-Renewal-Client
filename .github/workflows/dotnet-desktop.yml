@@ -17,7 +17,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
-      - run: gh release create ezca-client-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}"
       - name: Set up .NET Core
         uses: actions/setup-dotnet@v4
         with:
@@ -33,7 +32,10 @@ jobs:
       - name: Run Powershell Script 
         run: .\DotNetCertAuthSample\build.ps1
       - name: Upload Artifacts
-        run: gh release upload ezca-client-v${{ inputs.version }} .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0\win-x64\publish\EZCACertManager.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0\win-x64\publish\EZCACertManager.exe
 
   build-macos:
     runs-on: macos-latest
@@ -76,7 +78,10 @@ jobs:
           ./build-macos.sh
 
       - name: Upload Artifacts
-        run: gh release upload ezca-client-v${{ inputs.version }} ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binary
+          path: ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager
 
   build-linux:
     name: Build `.deb` for ${{ matrix.os }}
@@ -105,16 +110,48 @@ jobs:
         run: mv ./EZCACertManager.deb ./EZCACertManager-${{ matrix.os }}.deb
 
       - name: Upload Artifacts
-        working-directory: ./DotNetCertAuthSample
-        run: gh release upload ezca-client-v${{ inputs.version }} ./EZCACertManager-${{ matrix.os }}.deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary-${{ matrix.os }}
+          path: ./DotNetCertAuthSample/EZCACertManager-${{ matrix.os }}.deb
 
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
 
+      - name: Create GitHub Release
+        run: gh release create ezca-client-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}" --repo ${{ github.repository }}
 
+      - name: Upload Windows Binary
+        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/windows-binary/EZCACertManager.exe --repo ${{ github.repository }}
 
+      - name: Upload macOS Binary
+        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/macos-binary/EZCACertManager --repo ${{ github.repository }}
 
+      - name: Upload Linux Binaries
+        run: |
+          gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-22.04/EZCACertManager-ubuntu-22.04.deb --repo ${{ github.repository }}
+          gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-24.04/EZCACertManager-ubuntu-24.04.deb --repo ${{ github.repository }}
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
 
+      - name: Create GitHub Release
+        run: gh release create ezca-client-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}" --repo ${{ github.repository }}
 
+      - name: Upload Windows Binary
+        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/windows-binary/EZCACertManager.exe --repo ${{ github.repository }}
 
+      - name: Upload macOS Binary
+        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/macos-binary/EZCACertManager --repo ${{ github.repository }}
 
-
-
+      - name: Upload Linux Binaries
+        run: |
+          gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-22.04/EZCACertManager-ubuntu-22.04.deb --repo ${{ github.repository }}
+          gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-24.04/EZCACertManager-ubuntu-24.04.deb --repo ${{ github.repository }}
