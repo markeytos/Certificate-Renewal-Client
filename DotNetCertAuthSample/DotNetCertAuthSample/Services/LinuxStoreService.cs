@@ -51,6 +51,7 @@ public class LinuxStoreService : IStoreService
                         ext.Oid.Value == "1.3.6.1.4.1.311.20.2"
                         || ext.Oid.Value == "1.3.6.1.4.1.311.21.7"
                     )
+                    && ext.Format(false).Contains(templateName, StringComparison.OrdinalIgnoreCase)
                 ) != null
         );
     }
