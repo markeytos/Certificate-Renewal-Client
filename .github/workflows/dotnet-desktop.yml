@@ -46,8 +46,8 @@ jobs:
       MAC_CERT_PASSWORD: "${{ secrets.MAC_CERT_PASSWORD }}"
       KEYCHAIN_PASSWORD: "${{ secrets.MAC_KEYCHAIN_PASSWORD }}"
       MAC_CERT_BASE64: "${{ secrets.MAC_CERT_BASE64 }}"
-      TEAM_ID: ""
-      APPLE_ID: ""
+      TEAM_ID: "HVPRU6Y9WE"
+      APPLE_ID: "igalfsg@gmail.com"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
