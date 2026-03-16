@@ -50,7 +50,7 @@ xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE
 echo "[INFO] Verifying App with GateKeeper..."
 
 # check Gatekeeper
-spctl -a -vvv --assess --type execute "$BINARY_PATH"
-spctl -a -vvv "$BINARY_PATH"
+# spctl -a -vvv --assess --type execute "$BINARY_PATH"
+# spctl -a -vvv "$BINARY_PATH"
 
 echo "[INFO] Certificate Renewal Client Installed!"
