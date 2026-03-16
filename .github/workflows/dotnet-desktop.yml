@@ -139,21 +139,3 @@ jobs:
       #   run: |
       #     gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-22.04/EZCACertManager-ubuntu-22.04.deb --repo ${{ github.repository }}
       #     gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-24.04/EZCACertManager-ubuntu-24.04.deb --repo ${{ github.repository }}
-      # - name: Download all artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     path: ./artifacts
-      #
-      # - name: Create GitHub Release
-      #   run: gh release create ezca-client-v${{ inputs.version }} --title "Certificate Renewal Client v${{ inputs.version }}" --repo ${{ github.repository }}
-      #
-      # - name: Upload Windows Binary
-      #   run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/windows-binary/EZCACertManager.exe --repo ${{ github.repository }}
-      #
-      # - name: Upload macOS Binary
-      #   run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/macos-binary/EZCACertManager --repo ${{ github.repository }}
-      #
-      # - name: Upload Linux Binaries
-      #   run: |
-      #     gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-22.04/EZCACertManager-ubuntu-22.04.deb --repo ${{ github.repository }}
-      #     gh release upload ezca-client-v${{ inputs.version }} ./artifacts/linux-binary-ubuntu-24.04/EZCACertManager-ubuntu-24.04.deb --repo ${{ github.repository }}
