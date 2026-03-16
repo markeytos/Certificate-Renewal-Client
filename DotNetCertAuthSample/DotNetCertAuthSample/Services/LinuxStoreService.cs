@@ -12,7 +12,6 @@ public class LinuxStoreService : IStoreService
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         _userStorePath = Path.Combine(homeDir, "keytos", "certs");
-        CreateDirectoryIfNotExists(_userStorePath);
     }
 
     public X509Certificate2Collection FindCertificatesBySubject(
@@ -205,14 +204,10 @@ public class LinuxStoreService : IStoreService
         return "user store";
     }
 
-    public static void CreateDirectoryIfNotExists(string path)
+    private static void CreateDirectoryIfNotExists(string path)
     {
         if (!Directory.Exists(path))
         {
-            if (IsRunningAsRoot())
-            {
-                throw new InvalidOperationException("Run as non-root user to write to user store");
-            }
             Directory.CreateDirectory(path);
         }
     }

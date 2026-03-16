@@ -469,11 +469,8 @@ public class CertificateManager(
     {
         return Path.GetExtension(path).ToLower() switch
         {
-            ".pem" => false,
             ".pfx" => true,
             ".p12" => true,
-            ".cer" => false,
-            ".crt" => false,
             ".der" => true,
             _ => false,
         };
@@ -483,12 +480,8 @@ public class CertificateManager(
     {
         return Path.GetExtension(path).ToLower() switch
         {
-            ".pem" => false,
             ".pfx" => true,
             ".p12" => true,
-            ".cer" => false,
-            ".crt" => false,
-            ".der" => false,
             _ => false,
         };
     }
@@ -507,7 +500,7 @@ public class CertificateManager(
         };
     }
 
-    private static void AssertCorrectRenewArgModel(RenewArgModel values)
+    private void AssertCorrectRenewArgModel(RenewArgModel values)
     {
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
