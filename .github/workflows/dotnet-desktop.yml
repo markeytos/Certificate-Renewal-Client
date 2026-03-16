@@ -13,6 +13,7 @@ env:
 jobs:
 
   build-windows:
+    name: Build client for Windows
     runs-on: windows-latest  
     steps:
       - name: Checkout Code
@@ -38,6 +39,7 @@ jobs:
           path: .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0\win-x64\publish\EZCACertManager.exe
 
   build-macos:
+    name: Build client for MacOS
     runs-on: macos-latest
     env:
       NOTARIZE_PASSWORD: "${{ secrets.MAC_DEV_PASSWORD }}"
@@ -84,7 +86,7 @@ jobs:
           path: ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager
 
   build-linux:
-    name: Build `.deb` for ${{ matrix.os }}
+    name: Build client for Linux (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
