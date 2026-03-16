@@ -20,6 +20,7 @@ set -eou pipefail
 echo "[INFO] Building macOS app..."
 
 dotnet publish "$CSPROJ_FILE_PATH" \
+  --framework net10.0 \
   -r osx-arm64 \
   --configuration Release \
   -p:UseAppHost=true \
