@@ -23,12 +23,62 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 - Domain Controller certificate features (requires Active Directory)
 - Windows Certificate Store integration
 
-## Download Signed Binary
+## Installation
 
-1. Navigate to the releases section
+1. Navigate to the **Releases** section.
     <img width="1562" height="787" alt="image" src="https://github.com/user-attachments/assets/cc6dbf42-0625-48be-9a8f-348e3967e1b3" />
-1. Download the latest executable
+1. Download the latest executable for your operating system.
   <img width="1396" height="552" alt="image" src="https://github.com/user-attachments/assets/60d6c1ea-0577-4b68-8ced-539bbfac60b4" />
+
+### Windows
+
+1. Download `EZCACertManager.exe` from the [latest release](../../releases/latest).
+2. Open **PowerShell** or **Command Prompt** and navigate to the download location.
+3. Run the executable directly:
+   ```powershell
+   .\EZCACertManager.exe --help
+   ```
+4. *(Optional)* Add the directory to your `PATH` so you can run it from anywhere:
+   ```powershell
+   $env:PATH += ";C:\path\to\EZCACertManager"
+   ```
+   To make this permanent, add it via **System Properties → Environment Variables**.
+
+### MacOS
+
+1. Download `EZCACertManager` (macOS binary) from the [latest release](../../releases/latest).
+1. Open **Terminal** and navigate to the download location.
+1. Make the binary executable:
+   ```bash
+   chmod +x ./EZCACertManager
+   ```
+1. Run it:
+   ```bash
+   ./EZCACertManager --help
+   ```
+1. *(Optional)* Move it to a directory on your `PATH`:
+   ```bash
+   sudo mv ./EZCACertManager /usr/local/bin/EZCACertManager
+   ```
+   Then run from anywhere:
+   ```bash
+   EZCACertManager --help
+   ```
+
+### Linux
+
+1. Download `EZCACertManager.deb` (Linux binary) from the [latest release](../../releases/latest).
+1. Open a **terminal** and navigate to the download location.
+1. Install it:
+   ```bash
+   sudo dpkg -i ./EZCACertManager.deb
+   sudo apt -f install
+   ```
+1. Run it:
+   ```bash
+   EZCACertManager --help
+   ```
+
 
 ## Commands
 
