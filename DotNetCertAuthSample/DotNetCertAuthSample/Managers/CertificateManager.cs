@@ -647,13 +647,13 @@ public class CertificateManager(
         }
     }
 
-    private static void AssertPreservedMsal()
+    private void CheckPreservedUserCredentials()
     {
         string? dbus = Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS");
         if (string.IsNullOrWhiteSpace(dbus))
         {
-            throw new Exception(
-                "Must run command with 'sudo -E' to allow linux access to azure credentials"
+            _logger?.LogWarning(
+                "Run 'sudo -E' to preserve user credentials while running as root, proceeding without user credentials"
             );
         }
     }
@@ -836,7 +836,7 @@ public class CertificateManager(
         }
     }
 
-    private static void AssertLocalStoreProperties(bool localStore)
+    private void AssertLocalStoreProperties(bool localStore)
     {
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
@@ -844,7 +844,7 @@ public class CertificateManager(
         }
         if (localStore && OperatingSystem.IsLinux())
         {
-            AssertPreservedMsal();
+            CheckPreservedUserCredentials();
         }
     }
 
