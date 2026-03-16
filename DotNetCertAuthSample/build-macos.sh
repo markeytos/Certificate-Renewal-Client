@@ -13,6 +13,7 @@ CSPROJ_FILE_PATH="${BASE_PATH}/DotNetCertAuthSample.csproj"
 RELEASE_PATH="${BASE_PATH}/bin/Release"
 PUBLISH_OUTPUT_DIRECTORY="${RELEASE_PATH}/net10.0/osx-arm64/publish/"
 BINARY_PATH="${PUBLISH_OUTPUT_DIRECTORY}/EZCACertManager"
+ENTITLEMENTS="./EZCACertManager.entitlements"
 
 set -eou pipefail
 
