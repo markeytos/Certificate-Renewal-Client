@@ -36,16 +36,16 @@ echo "[INFO] Verifying binary..."
 codesign --verify --verbose=4 "$BINARY_PATH"
 codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 
-echo "[INFO] Creating and signing zip for notarization..."
+echo "[INFO] Creating zip for notarization..."
 zip -j "$ZIP_PATH" "$BINARY_PATH"
-codesign --force --timestamp --options=runtime --entitlements "$ENTITLEMENTS" --sign "$SIGNING_IDENTITY" "$ZIP_PATH"
-codesign --verify --verbose=4 "$ZIP_PATH"
+# codesign --force --timestamp --options=runtime --entitlements "$ENTITLEMENTS" --sign "$SIGNING_IDENTITY" "$ZIP_PATH"
+# codesign --verify --verbose=4 "$ZIP_PATH"
 
 echo "[INFO] Submitting zip and stapling binary..."
 
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
-xcrun stapler staple "$BINARY_PATH"
-xcrun stapler validate "$BINARY_PATH"
+# xcrun stapler staple "$BINARY_PATH"
+# xcrun stapler validate "$BINARY_PATH"
 
 echo "[INFO] Verifying App with GateKeeper..."
 
