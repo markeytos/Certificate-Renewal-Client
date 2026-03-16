@@ -81,24 +81,29 @@ EZCACertManager.exe create --help
 
   --caid                Required. CA ID of the CA you want to request the certificate from
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
-                        certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user
+                        store
 
   -v, --Validity        Required. Certificate validity in days
 
-  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
-  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
-  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
   -k, --KeyLength       (Default: 4096) Certificate Key Length
 
-  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
-                        Microsoft Enhanced Cryptographic Provider v1.0)
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default: Microsoft Enhanced Cryptographic
+                        Provider v1.0)
+
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file as
+                        well.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
 
   --help                Display this help screen.
 
@@ -132,8 +137,7 @@ EZCACertManager.exe renew --help
 
   -e, --EZCAInstance    (Default: https://portal.ezca.io/) EZCA instance url
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
-                        certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store
 
   -t, --Template        (Default: ) Certificate Template Name
 
@@ -141,12 +145,16 @@ EZCACertManager.exe renew --help
 
   -k, --KeyLength       (Default: 4096) Certificate Key Length
 
-  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
-                        Microsoft Enhanced Cryptographic Provider v1.0)
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)
+
+  --Path                If specified, certificate will be saved to that path. If specified with pfx or p12 ending, private key will be saved.
+
+  --Password            Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed.
 
   --help                Display this help screen.
 
   --version             Display version information.
+```
 ```
 
 Sample call:
@@ -203,6 +211,10 @@ EZCACertManager.exe createDC --help
                         in addition to the Domain name. When not specified, only the Domain name is added as a SAN.
                         For example: server1.contoso.com,server2.contoso.com
 
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
+
   --help                Display this help screen.
 
   --version             Display version information.
@@ -241,6 +253,14 @@ EZCACertManager.exe SCEPCertificate --help
 
   --SubjectAltNames     Subject Alternate Names for this certificate for example (comma separate multiple):
                         server1.constoso.com,server2.contoso.com (If left empty it will use the computer name in your domain)
+
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
+
+  --help                Display this help screen.
+
+  --version             Display version information.
 ```
 
 Sample call:

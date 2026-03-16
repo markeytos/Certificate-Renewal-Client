@@ -25,6 +25,7 @@ build-app: out
 	  --nologo \
 	  --configuration Release \
 	  --self-contained true \
+	  --framework net10.0 \
 	  --runtime linux-x64 \
 	  --output "./out/linux-x64" \
 	  -p:Version=${VERSION} \

@@ -635,6 +635,11 @@ public class CertificateManager(
             string message = "To write to the local store, run the CLI with 'sudo -E'";
             throw new Exception(message);
         }
+        if (!localStore && IsRunningAsRoot() && OperatingSystem.IsLinux())
+        {
+            string message = "To write to the user store, do not run the CLI with sudo";
+            throw new Exception(message);
+        }
         if (localStore && !IsRunningAsRoot() && OperatingSystem.IsMacOS())
         {
             string message = "To write to the local store, run the CLI with 'sudo'";

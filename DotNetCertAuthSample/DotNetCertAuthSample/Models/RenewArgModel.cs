@@ -71,16 +71,16 @@ public class RenewArgModel
     public string KeyProvider { get; set; } = "Microsoft Enhanced Cryptographic Provider v1.0";
 
     [Option(
-        "Password",
-        Required = false,
-        HelpText = "Password for certificate pfx file. If not provided, a random password will be generated. The password will be written to a file."
-    )]
-    public string? Password { get; set; }
-
-    [Option(
         "Path",
         Required = false,
-        HelpText = "If specified, certificate will be saved to that path. If specified with pfx ending, private key will be saved."
+        HelpText = "Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected."
     )]
     public string? Path { get; set; }
+
+    [Option(
+        "Password",
+        Required = false,
+        HelpText = "Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed."
+    )]
+    public string? Password { get; set; }
 }
