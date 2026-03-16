@@ -650,9 +650,9 @@ public class CertificateManager(
     private void CheckPreservedUserCredentials()
     {
         string? dbus = Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS");
-        if (string.IsNullOrWhiteSpace(dbus))
+        if (string.IsNullOrWhiteSpace(dbus) && _logger != null)
         {
-            _logger?.LogWarning(
+            LogWarning(
                 "Run 'sudo -E' to preserve user credentials while running as root, proceeding without user credentials"
             );
         }
@@ -1478,6 +1478,13 @@ public class CertificateManager(
     {
         ArgumentNullException.ThrowIfNull(_logger);
         _logger.LogInformation(message);
+        Console.WriteLine(message);
+    }
+
+    private void LogWarning(string message)
+    {
+        ArgumentNullException.ThrowIfNull(_logger);
+        _logger.LogWarning(message);
         Console.WriteLine(message);
     }
 
