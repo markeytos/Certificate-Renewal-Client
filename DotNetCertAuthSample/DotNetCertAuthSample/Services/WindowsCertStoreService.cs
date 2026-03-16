@@ -8,6 +8,7 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
+using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -37,7 +38,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         certRequest.PrivateKey.MachineContext = localStore;
         certRequest.PrivateKey.ProviderName = KeyProvider;
         certRequest.PrivateKey.Create();
-        var objDN = new CX500DistinguishedName();
+        CX500DistinguishedName objDN = new();
         certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
         objDN.Encode(subjectName, X500NameFlags.XCN_CERT_NAME_STR_NONE);
         certRequest.Subject = objDN;
@@ -171,12 +172,9 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
 
     public static CERTENROLLLib.X509KeyUsageFlags? GetKeyUsages(X509Certificate2 certificate)
     {
-        if (certificate == null)
-        {
-            throw new ArgumentNullException(nameof(certificate));
-        }
+        ArgumentNullException.ThrowIfNull(certificate);
 
-        foreach (var extension in certificate.Extensions)
+        foreach (X509Extension extension in certificate.Extensions)
         {
             if (extension.Oid?.Value == "2.5.29.15") // Key Usage OID
             {
