@@ -160,9 +160,20 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
     {
         const int length = 32;
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
-        var random = new Random();
-        return new string(Enumerable.Repeat(chars, length)
-            .Select(s => s[random.Next(s.Length)]).ToArray());
+        var password = new char[length];
+        var randomBytes = new byte[length];
+        
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomBytes);
+        }
+        
+        for (int i = 0; i < length; i++)
+        {
+            password[i] = chars[randomBytes[i] % chars.Length];
+        }
+        
+        return new string(password);
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
