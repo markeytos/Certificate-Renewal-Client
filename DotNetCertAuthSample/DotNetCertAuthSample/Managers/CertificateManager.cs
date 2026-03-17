@@ -46,7 +46,6 @@ public class CertificateManager(
     private RegisterArgModel? _registerArgModel;
     private CreateDCCertificate? _createDCCertArgModel;
     private SCEPArgModel? _scepArgModel;
-    private TestModel? _testModel;
     private readonly HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
     private readonly ICertStoreService _certStoreService = certStoreService;
@@ -95,12 +94,6 @@ public class CertificateManager(
         return 0;
     }
 
-    public int InitializeManager(TestModel values)
-    {
-        _testModel = values;
-        return 0;
-    }
-
     public int ProcessError(IEnumerable<Error> errs)
     {
         return 1;
@@ -129,28 +122,12 @@ public class CertificateManager(
         {
             response = await CreateSCEPCertificate(_scepArgModel);
         }
-        else if (_testModel != null)
-        {
-            response = await TestAsync();
-        }
         if (_telemetryClient != null)
         {
             await _telemetryClient.FlushAsync(CancellationToken.None);
             Thread.Sleep(5000);
         }
         return response;
-    }
-
-    private async Task<int> TestAsync()
-    {
-        Console.WriteLine(
-            "This is a test method to validate that everything is working fine. It will try to find a certificate with subject CN=localhost in the user store."
-        );
-        X509Certificate2 certificate = _certStoreService.GetCertFromStore("localhost", true);
-        Console.WriteLine($"Found certificate: {certificate.Subject}");
-        Console.WriteLine($"Found certificate: {certificate.NotAfter}");
-        Console.WriteLine("Test completed successfully");
-        return 1;
     }
 
     private async Task<int> RenewAsync(RenewArgModel values)
@@ -356,7 +333,7 @@ public class CertificateManager(
             writer.Write((byte)0x30); // SEQUENCE
             using (MemoryStream innerStream = new())
             {
-                BinaryWriter innerWriter = new(innerStream);
+                var innerWriter = new BinaryWriter(innerStream);
                 EncodeIntegerBigEndian(innerWriter, [0x00]); // Version
                 EncodeIntegerBigEndian(innerWriter, parameters.Modulus!);
                 EncodeIntegerBigEndian(innerWriter, parameters.Exponent!);
@@ -977,7 +954,7 @@ public class CertificateManager(
     private static bool IsCACertificate(X509Certificate2 cert)
     {
         var basicConstraints = (X509BasicConstraintsExtension?)cert.Extensions["2.5.29.19"];
-        bool isCA = basicConstraints != null && basicConstraints.CertificateAuthority;
+        var isCA = basicConstraints != null && basicConstraints.CertificateAuthority;
         return isCA;
     }
 
@@ -988,10 +965,10 @@ public class CertificateManager(
     )
     {
         // Create the certificate generator
-        X509V3CertificateGenerator certGen = new();
+        var certGen = new X509V3CertificateGenerator();
 
         // Set certificate subject and issuer (self-signed so issuer is the same as the subject)
-        X509Name issuerName = new($"CN={subjectName}");
+        var issuerName = new X509Name($"CN={subjectName}");
         certGen.SetIssuerDN(issuerName);
         certGen.SetSubjectDN(issuerName);
 
