@@ -205,7 +205,6 @@ EZCACertManager.exe renew --help
 
   --version             Display version information.
 ```
-```
 
 Sample call:
 
@@ -277,7 +276,7 @@ Sample command:
 ```
 
 
-### Create SCEP Certificates for Non-Managed Windows Devices
+### Create SCEP Certificates for Unmanaged Devices
 
 If you are migrating to the cloud but not all of your devices are cloud managed or MDM managed, you can use this client to request certificates from EZCA using static SCEP for those devices. To Request a Static SCEP certificate, you will need your Static SCEP URL from EZCA, and the Static Challenge, you can find this information in the EZCA portal under the Certificate Authority details.
 ![How To Enable Static SCEP](https://github.com/user-attachments/assets/671f54bc-0669-40ab-a1e0-977fce493d22)
