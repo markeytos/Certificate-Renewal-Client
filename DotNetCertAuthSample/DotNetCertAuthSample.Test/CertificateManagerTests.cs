@@ -260,6 +260,68 @@ public class CertificateManagerTests
     }
 
     [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Renew_User_Certificate_Search_By_Issuer_UserStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewUserArgs = new()
+        {
+            Domain = domainUser,
+            issuer = TestConfig.SslCaIssuer,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(renewUserArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "Root")]
+    public async Task Renew_Machine_Certificate_Search_By_Issuer_LocalStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainMachine = NewDomain();
+
+        GenerateArgModel createMachineArgs = new()
+        {
+            Domain = domainMachine,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = true,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(createMachineArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewMachineArgs = new()
+        {
+            Domain = domainMachine,
+            issuer = TestConfig.SslCaIssuer,
+            LocalCertStore = true,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(renewMachineArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
     [Trait("Privilege", "Root")]
     public async Task Create_DomainController_Certificate_LocalStore()
     {

@@ -4,6 +4,10 @@ internal static class TestConfig
 {
     public static string SslCaId => GetRequired("EZCA_SSL_CA_ID");
 
+    public static string SslCaIssuer => GetRequired("EZCA_SSL_CA_ISSUER");
+
+    public static string TemplateName => GetRequired("TEMPLATE_NAME");
+
     public static string ScepCaId => GetRequired("EZCA_SCEP_CA_ID");
 
     public static string ScepTemplateId => GetRequired("EZCA_SCEP_TEMPLATE_ID");
