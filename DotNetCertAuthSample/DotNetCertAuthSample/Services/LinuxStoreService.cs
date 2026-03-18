@@ -212,9 +212,4 @@ public class LinuxStoreService : IStoreService
             Directory.CreateDirectory(path);
         }
     }
-
-    private static bool IsRunningAsRoot()
-    {
-        return string.Equals(Environment.UserName, "root", StringComparison.OrdinalIgnoreCase);
-    }
 }

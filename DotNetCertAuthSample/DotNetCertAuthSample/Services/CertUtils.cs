@@ -28,7 +28,7 @@ public static class CertUtils
         return certWithKey;
     }
 
-    public static string GetOrGeneratePasswordForCert(string? password)
+    public static string GetOrGeneratePasswordForCert(string? password = null)
     {
         if (!string.IsNullOrWhiteSpace(password))
         {

@@ -147,33 +147,13 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
     )
     {
         // Generate a random password for temporary PFX export/import
-        string tempPassword = GenerateRandomPassword();
+        string tempPassword = CertUtils.GetOrGeneratePasswordForCert();
         byte[] pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
         X509KeyStorageFlags flags = localStore
             ? X509KeyStorageFlags.MachineKeySet
             : X509KeyStorageFlags.UserKeySet;
         certificate = X509CertificateLoader.LoadPkcs12(pfx, tempPassword, flags);
         return certificate;
-    }
-
-    private static string GenerateRandomPassword()
-    {
-        const int length = 32;
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
-        var password = new char[length];
-        var randomBytes = new byte[length];
-        
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(randomBytes);
-        }
-        
-        for (int i = 0; i < length; i++)
-        {
-            password[i] = chars[randomBytes[i] % chars.Length];
-        }
-        
-        return new string(password);
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
