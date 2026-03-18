@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using EZCAClient.Services;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
@@ -42,7 +43,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         return new CsrData { CsrPem = csrPem, PrivateKeyContext = keyPair };
     }
 
-    public void InstallCertificate(
+    public object? InstallCertificate(
         string cert,
         CsrData csrData,
         bool localStore,
@@ -51,6 +52,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
     {
         X509Certificate2 certificate = CertUtils.CopyPrivateKeyFromCsr(this, cert, csrData);
         InstallCertificateWithPrivateKey(certificate, localStore, password);
+        return null;
     }
 
     public void InstallCertificateWithPrivateKey(
@@ -227,5 +229,25 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
             false,
             subjectAlternativeNames
         );
+    }
+
+    public byte[] ExportCertificate(
+        string certificatePEM,
+        CsrData csrData,
+        object? enrollmentContext,
+        bool withPrivateKey = false,
+        string? password = null
+    )
+    {
+        if (withPrivateKey)
+        {
+            X509Certificate2 cert = CertUtils.CopyPrivateKeyFromCsr(this, certificatePEM, csrData);
+            return cert.Export(X509ContentType.Pfx, password);
+        }
+        else
+        {
+            X509Certificate2 cert = CryptoStaticService.ImportCertFromPEMString(certificatePEM);
+            return cert.Export(X509ContentType.Cert);
+        }
     }
 }

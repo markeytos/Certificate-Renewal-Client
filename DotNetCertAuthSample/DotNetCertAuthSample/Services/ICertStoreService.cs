@@ -18,7 +18,13 @@ public interface ICertStoreService
 
     RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams);
 
-    void InstallCertificate(string cert, CsrData csrData, bool localStore, string? password = null);
+    // on windows, returns a CX509Enrollment
+    object? InstallCertificate(
+        string cert,
+        CsrData csrData,
+        bool localStore,
+        string? password = null
+    );
 
     void InstallCertificateWithPrivateKey(
         X509Certificate2 certificate,
@@ -34,5 +40,11 @@ public interface ICertStoreService
         string? password = null
     );
 
-    public X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData);
+    byte[] ExportCertificate(
+        string certificatePEM,
+        CsrData csrData,
+        object? enrollmentContext,
+        bool withPrivateKey = false,
+        string? password = null
+    );
 }
