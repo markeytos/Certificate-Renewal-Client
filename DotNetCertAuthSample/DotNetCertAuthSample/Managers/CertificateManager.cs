@@ -308,123 +308,10 @@ public class CertificateManager(
         }
         else
         {
-            string pem;
-            if (includePrivateKey)
-            {
-                string certPem = CryptoStaticService.ExportToPEM(certToExport);
-                string privateKeyPem = GetRSAPrivateKey(certToExport.GetRSAPrivateKey()!);
-                pem = string.Join(Environment.NewLine, certPem, privateKeyPem);
-            }
-            else
-            {
-                pem = CryptoStaticService.ExportToPEM(certToExport);
-            }
+            string pem = CryptoStaticService.ExportToPEM(certToExport);
             await File.WriteAllTextAsync(path, pem);
         }
         LogInformation($"Certificate saved to {path}");
-    }
-
-    private static string GetRSAPrivateKey(RSA rsaKey)
-    {
-        RSAParameters parameters = rsaKey.ExportParameters(true);
-        using (MemoryStream stream = new())
-        {
-            var writer = new BinaryWriter(stream);
-            writer.Write((byte)0x30); // SEQUENCE
-            using (MemoryStream innerStream = new())
-            {
-                var innerWriter = new BinaryWriter(innerStream);
-                EncodeIntegerBigEndian(innerWriter, [0x00]); // Version
-                EncodeIntegerBigEndian(innerWriter, parameters.Modulus!);
-                EncodeIntegerBigEndian(innerWriter, parameters.Exponent!);
-                EncodeIntegerBigEndian(innerWriter, parameters.D!);
-                EncodeIntegerBigEndian(innerWriter, parameters.P!);
-                EncodeIntegerBigEndian(innerWriter, parameters.Q!);
-                EncodeIntegerBigEndian(innerWriter, parameters.DP!);
-                EncodeIntegerBigEndian(innerWriter, parameters.DQ!);
-                EncodeIntegerBigEndian(innerWriter, parameters.InverseQ!);
-                int length = (int)innerStream.Length;
-                EncodeLength(writer, length);
-                writer.Write(innerStream.GetBuffer(), 0, length);
-            }
-            char[] base64 = Convert
-                .ToBase64String(stream.GetBuffer(), 0, (int)stream.Length)
-                .ToCharArray();
-            using (StringWriter outputStream = new())
-            {
-                outputStream.WriteLine("-----BEGIN RSA PRIVATE KEY-----");
-                for (var i = 0; i < base64.Length; i += 64)
-                {
-                    outputStream.WriteLine(base64, i, Math.Min(64, base64.Length - i));
-                }
-                outputStream.WriteLine("-----END RSA PRIVATE KEY-----");
-                return outputStream.ToString();
-            }
-        }
-    }
-
-    private static void EncodeIntegerBigEndian(
-        BinaryWriter stream,
-        byte[] value,
-        bool forceUnsigned = true
-    )
-    {
-        stream.Write((byte)0x02); // INTEGER
-        int prefixZeros = 0;
-        for (int i = 0; i < value.Length; i++)
-        {
-            if (value[i] != 0)
-                break;
-            prefixZeros++;
-        }
-        if (value.Length - prefixZeros == 0)
-        {
-            EncodeLength(stream, 1);
-            stream.Write((byte)0);
-        }
-        else
-        {
-            if (forceUnsigned && value[prefixZeros] > 0x7f)
-            {
-                // Add a prefix zero to force unsigned if the MSB is 1
-                EncodeLength(stream, value.Length - prefixZeros + 1);
-                stream.Write((byte)0);
-            }
-            else
-            {
-                EncodeLength(stream, value.Length - prefixZeros);
-            }
-            for (var i = prefixZeros; i < value.Length; i++)
-            {
-                stream.Write(value[i]);
-            }
-        }
-    }
-
-    private static void EncodeLength(BinaryWriter stream, int length)
-    {
-        if (length < 0)
-            throw new ArgumentOutOfRangeException(nameof(length), "Length must be non-negative");
-        if (length < 0x80)
-        {
-            // Short form
-            stream.Write((byte)length);
-        }
-        else
-        {
-            int temp = length;
-            int bytesRequired = 0;
-            while (temp > 0)
-            {
-                temp >>= 8;
-                bytesRequired++;
-            }
-            stream.Write((byte)(bytesRequired | 0x80));
-            for (int i = bytesRequired - 1; i >= 0; i--)
-            {
-                stream.Write((byte)(length >> (8 * i) & 0xff));
-            }
-        }
     }
 
     private static string ParseAndCreateCertificatePath(string path)
@@ -840,12 +727,12 @@ public class CertificateManager(
             AsymmetricCipherKeyPair signingKeyPair = CreateKeyPair($"RSA {values.KeyLength}");
             X509Certificate2 cert = GenerateSelfSignedCertificate(signingKeyPair, "TempCert");
             CmsSigner signer = new(cert);
-            var messageType = new AsnEncodedData(
+            AsnEncodedData messageType = new(
                 "2.16.840.1.113733.1.9.2",
                 DerEncoding.EncodePrintableString("19")
             );
             signer.SignedAttributes.Add(messageType);
-            var transactionID = new Pkcs9AttributeObject(
+            Pkcs9AttributeObject transactionID = new Pkcs9AttributeObject(
                 "2.16.840.1.113733.1.9.7",
                 DerEncoding.EncodePrintableString(
                     Convert.ToBase64String(SHA512.HashData(cert.GetPublicKey()))
@@ -855,7 +742,7 @@ public class CertificateManager(
             SecureRandom random = new();
             byte[] nonceBytes = new byte[16]; // Typically a 16-byte nonce
             random.NextBytes(nonceBytes);
-            var nonce = new Pkcs9AttributeObject(
+            Pkcs9AttributeObject nonce = new Pkcs9AttributeObject(
                 "2.16.840.1.113733.1.9.5",
                 DerEncoding.EncodeOctet(nonceBytes)
             );
@@ -906,22 +793,23 @@ public class CertificateManager(
         string? password = null
     )
     {
-        var signedResponse = new SignedCms();
+        SignedCms signedResponse = new();
         signedResponse.Decode(responseBytes);
         X509Certificate2Collection caCerts = [caCertificate];
         signedResponse.CheckSignature(caCerts, true);
-        var attributes = signedResponse
+        List<CryptographicAttributeObject> attributes = signedResponse
             .SignerInfos.Cast<SignerInfo>()
-            .SelectMany(si => si.SignedAttributes.Cast<CryptographicAttributeObject>());
-        var recipientNonce =
+            .SelectMany(si => si.SignedAttributes.Cast<CryptographicAttributeObject>())
+            .ToList();
+        CryptographicAttributeObject recipientNonce =
             attributes.FirstOrDefault(a => a.Oid.Value == "2.16.840.1.113733.1.9.6")
             ?? throw new Exception("Recipient nonce not found in response");
         if (!nonce.SequenceEqual(recipientNonce.Values[0].RawData.AsSpan()[2..]))
         {
             throw new Exception("Recipient nonce does not match");
         }
-        var certBytes = signedResponse.ContentInfo.Content;
-        var cmsResponse = new EnvelopedCms();
+        byte[] certBytes = signedResponse.ContentInfo.Content;
+        EnvelopedCms cmsResponse = new();
         cmsResponse.Decode(signedResponse.ContentInfo.Content);
         cmsResponse.Decrypt(new X509Certificate2Collection(signingCert));
         X509Certificate2Collection certCollection = [];
@@ -953,8 +841,9 @@ public class CertificateManager(
 
     private static bool IsCACertificate(X509Certificate2 cert)
     {
-        var basicConstraints = (X509BasicConstraintsExtension?)cert.Extensions["2.5.29.19"];
-        var isCA = basicConstraints != null && basicConstraints.CertificateAuthority;
+        X509BasicConstraintsExtension? basicConstraints = (X509BasicConstraintsExtension?)
+            cert.Extensions["2.5.29.19"];
+        bool isCA = basicConstraints != null && basicConstraints.CertificateAuthority;
         return isCA;
     }
 
@@ -965,10 +854,10 @@ public class CertificateManager(
     )
     {
         // Create the certificate generator
-        var certGen = new X509V3CertificateGenerator();
+        X509V3CertificateGenerator certGen = new();
 
         // Set certificate subject and issuer (self-signed so issuer is the same as the subject)
-        var issuerName = new X509Name($"CN={subjectName}");
+        X509Name issuerName = new($"CN={subjectName}");
         certGen.SetIssuerDN(issuerName);
         certGen.SetSubjectDN(issuerName);
 
@@ -1055,19 +944,19 @@ public class CertificateManager(
 
     private static AsymmetricCipherKeyPair CreateKeyPair(string keyAlgo)
     {
-        var randomGenerator = new CryptoApiRandomGenerator();
-        var random = new SecureRandom(randomGenerator);
+        CryptoApiRandomGenerator randomGenerator = new();
+        SecureRandom random = new(randomGenerator);
         if (keyAlgo.Contains("RSA", StringComparison.OrdinalIgnoreCase))
         {
             int strength = int.Parse(keyAlgo.Split(" ")[1]);
-            var keyGenerationParameters = new KeyGenerationParameters(random, strength);
-            var keyPairGenerator = new RsaKeyPairGenerator();
+            KeyGenerationParameters keyGenerationParameters = new(random, strength);
+            RsaKeyPairGenerator keyPairGenerator = new();
             keyPairGenerator.Init(keyGenerationParameters);
             return keyPairGenerator.GenerateKeyPair();
         }
         if (keyAlgo.Contains("ECDSA", StringComparison.OrdinalIgnoreCase))
         {
-            var ecKeyPairGenerator = new ECKeyPairGenerator();
+            ECKeyPairGenerator ecKeyPairGenerator = new();
             ECKeyGenerationParameters ecKeyGenParams;
             if (keyAlgo.Contains("256"))
             {
@@ -1214,7 +1103,7 @@ public class CertificateManager(
         // Add additional SANs if provided, with deduplication
         if (additionalSubjectAltNames?.Count > 0)
         {
-            var newSans = additionalSubjectAltNames
+            List<string> newSans = additionalSubjectAltNames
                 .Where(san => !subjectAltNames.Contains(san, StringComparer.OrdinalIgnoreCase))
                 .ToList();
             subjectAltNames.AddRange(newSans);
@@ -1373,21 +1262,23 @@ public class CertificateManager(
         X509Certificate2 certificate
     )
     {
-        var subjectAlternativeNames = new List<X509SubjectAlternativeName>();
+        List<X509SubjectAlternativeName> subjectAlternativeNames = new();
 
         // Convert X509Certificate2 to Bouncy Castle X509Certificate
-        var parser = new X509CertificateParser();
-        var bcCert = parser.ReadCertificate(certificate.RawData);
+        X509CertificateParser parser = new();
+        X509Certificate bcCert = parser.ReadCertificate(certificate.RawData);
 
         // Get the SubjectAlternativeNames extension
-        var sanExtension = bcCert.GetExtensionValue(X509Extensions.SubjectAlternativeName);
+        Asn1OctetString sanExtension = bcCert.GetExtensionValue(
+            X509Extensions.SubjectAlternativeName
+        );
 
         if (sanExtension != null)
         {
-            var asn1Object = X509ExtensionUtilities.FromExtensionValue(sanExtension);
-            var generalNames = GeneralNames.GetInstance(asn1Object);
+            Asn1Object asn1Object = X509ExtensionUtilities.FromExtensionValue(sanExtension);
+            GeneralNames generalNames = GeneralNames.GetInstance(asn1Object);
 
-            foreach (var generalName in generalNames.GetNames())
+            foreach (GeneralName generalName in generalNames.GetNames())
             {
                 X509SubjectAlternativeName x509SubjectAlternativeName = new();
                 switch (generalName.TagNo)
@@ -1417,11 +1308,11 @@ public class CertificateManager(
                         break;
                     case GeneralName.OtherName:
                         x509SubjectAlternativeName.Type = SANTypes.OtherName;
-                        var sequence = Asn1Sequence.GetInstance(generalName.Name);
-                        var oid = DerObjectIdentifier.GetInstance(sequence[0]);
+                        Asn1Sequence sequence = Asn1Sequence.GetInstance(generalName.Name);
+                        DerObjectIdentifier oid = DerObjectIdentifier.GetInstance(sequence[0]);
                         if (oid.Id == "1.3.6.1.4.1.311.20.2.3") // OID for UPN
                         {
-                            var upn = DerUtf8String.GetInstance(
+                            DerUtf8String upn = DerUtf8String.GetInstance(
                                 Asn1TaggedObject.GetInstance(sequence[1]).GetBaseObject()
                             );
                             x509SubjectAlternativeName.Value = upn.GetString();
