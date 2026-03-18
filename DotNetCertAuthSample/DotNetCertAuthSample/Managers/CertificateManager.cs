@@ -263,7 +263,7 @@ public class CertificateManager(
         X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
         if (includePrivateKey)
         {
-            certToExport = CertUtils.CopyPrivateKeyFromCsr(_certStoreService, createdCert, csrData);
+            certToExport = _certStoreService.CopyPrivateKeyFromCsr(createdCert, csrData);
         }
 
         await WriteCertificateToFileAsync(

@@ -9,6 +9,7 @@ using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
+using EZCAClient.Services;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -232,6 +233,22 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         }
 
         return flags;
+    }
+
+    public X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData)
+    {
+        CX509CertificateRequestPkcs10 privateKeyContext = (CX509CertificateRequestPkcs10)
+            csrData.PrivateKeyContext;
+        PrivateKey privateKey = (CX509CertificateRequestPkcs10)csrData.PrivateKeyContext;
+        X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
+        string exportedKey = privateKeyContext.PrivateKey.Export(
+            "PRIVATEBLOB",
+            EncodingType.XCN_CRYPT_STRING_BASE64
+        );
+        byte[] keyBytes = Convert.FromBase64String(exportedKey);
+        using RSA rsa = RSA.Create();
+        rsa.ImportRSAPrivateKey(keyBytes, out _);
+        return certificate.CopyWithPrivateKey(rsa);
     }
 }
 #endif
