@@ -68,7 +68,7 @@ public class SCEPArgModel
     [Option(
         "Password",
         Required = false,
-        HelpText = "Password for certificate file. If not provided, a random password will be generated. The password will be written to a file."
+        HelpText = "Password for certificate file. If not provided, a random password will be generated and saved to {filename}_password.txt in the same directory as the certificate file."
     )]
     public string? Password { get; set; }
 }

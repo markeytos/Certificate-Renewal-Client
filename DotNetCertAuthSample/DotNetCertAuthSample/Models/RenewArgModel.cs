@@ -80,7 +80,7 @@ public class RenewArgModel
     [Option(
         "Password",
         Required = false,
-        HelpText = "Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed."
+        HelpText = "Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed. If not provided, a random password will be generated and saved to {filename}_password.txt in the same directory as the certificate file."
     )]
     public string? Password { get; set; }
 }
