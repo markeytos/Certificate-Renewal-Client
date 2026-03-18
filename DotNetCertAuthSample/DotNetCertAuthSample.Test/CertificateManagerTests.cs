@@ -344,6 +344,53 @@ public class CertificateManagerTests
     }
 
     [Fact]
+    [Trait("Privilege", "Root")]
+    public async Task Create_DomainController_Certificate_EKUs_LocalStore()
+    {
+        CertificateManager manager = CreateManager();
+        const string dnsName = "dc.cert.contoso.com";
+        string dcSubject = dnsName;
+        List<string> ekus = ["1.3.6.1.5.5.7.3.5"];
+
+        CreateDCCertificate createDcArgs = new()
+        {
+            Domain = dnsName,
+            SubjectName = dcSubject,
+            caID = TestConfig.ScepCaId,
+            TemplateID = TestConfig.ScepTemplateId,
+            Validity = 30,
+            Password = TestConfig.CertPassword,
+            EKUs = ekus,
+        };
+        manager.InitializeManager(createDcArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "Root")]
+    public async Task Create_DomainController_Certificate_SubjectAltNames_LocalStore()
+    {
+        CertificateManager manager = CreateManager();
+        const string dnsName = "dc.cert.contoso.com";
+        string dcSubject = dnsName;
+        string subjectAltNames = "one.contoso.com,two.contoso.com,three.contoso.com";
+
+        CreateDCCertificate createDcArgs = new()
+        {
+            SubjectName = dcSubject,
+            caID = TestConfig.ScepCaId,
+            TemplateID = TestConfig.ScepTemplateId,
+            Validity = 30,
+            Password = TestConfig.CertPassword,
+            SubjectAltNames = subjectAltNames,
+        };
+        manager.InitializeManager(createDcArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
     [Trait("Privilege", "User")]
     public async Task Request_Scep_User_Certificate_UserStore()
     {
