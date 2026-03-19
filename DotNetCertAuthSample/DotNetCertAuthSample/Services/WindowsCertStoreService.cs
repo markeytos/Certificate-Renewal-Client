@@ -38,7 +38,8 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         if (makePrivateKeyExportable)
         {
             certRequest.PrivateKey.ExportPolicy =
-                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_FLAG | X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_PLAINTEXT_EXPORT_FLAG;
+                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_FLAG
+                | X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_PLAINTEXT_EXPORT_FLAG;
         }
         else
         {
@@ -131,12 +132,12 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
     }
 
     public X509Certificate2 GetCertFromStore(
-    string subjectName,
-    bool localStore,
-    string issuerName = "",
-    string templateName = "",
-    string? password = null
-)
+        string subjectName,
+        bool localStore,
+        string issuerName = "",
+        string templateName = "",
+        string? password = null
+    )
     {
         return CertUtils.GetCertFromStore(
             storeService,
@@ -166,7 +167,13 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
             EncodingType.XCN_CRYPT_STRING_BASE64
         );
         byte[] pfxBytes = Convert.FromBase64String(pfxBase64);
-        X509Certificate2 certWithKey = X509CertificateLoader.LoadPkcs12(pfxBytes, password);
+        X509Certificate2 certWithKey = X509CertificateLoader.LoadPkcs12(
+            pfxBytes,
+            password,
+            X509KeyStorageFlags.Exportable
+        );
+        Console.WriteLine("Certificate with private key created successfully.");
+        Console.WriteLine($"Certificate has private key: {certWithKey.HasPrivateKey}");
         return certWithKey;
     }
 
