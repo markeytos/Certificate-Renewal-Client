@@ -496,4 +496,91 @@ public class CertificateManagerTests
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
     }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Create_User_Certificate_UserStore_KeyLength()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+            KeyLength = 2048,
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    [Trait("OS", "Windows")]
+    public async Task Create_User_Certificate_UserStore_SoftwareKeyProvider()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+            KeyProvider = "Microsoft Software Key Storage Provider",
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    [Trait("OS", "Windows")]
+    public async Task Create_User_Certificate_UserStore_CryptoKeyProvider()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+            KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    [Trait("OS", "Windows")]
+    public async Task Create_User_Certificate_UserStore_RDP()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+            RDPCert = true,
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
 }
