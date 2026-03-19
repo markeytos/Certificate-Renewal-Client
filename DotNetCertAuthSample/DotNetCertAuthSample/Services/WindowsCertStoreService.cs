@@ -86,7 +86,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
     }
 
-    public object? InstallCertificate(
+    public void InstallCertificate(
         string cert,
         CsrData csrData,
         bool localStore,
@@ -107,7 +107,6 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
             EncodingType.XCN_CRYPT_STRING_BASE64HEADER,
             null
         );
-        return objEnroll;
     }
 
     public void InstallCertificateWithPrivateKey(
@@ -236,30 +235,20 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         return flags;
     }
 
-    public byte[] ExportCertificate(
-        string certificatePEM,
-        CsrData csrData,
-        object? enrollmentContext,
-        bool withPrivateKey = false,
-        string? password = null
-    )
+    public X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData)
     {
-        X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
-
-        if (includePrivateKey)
-        {
-            string pfxBase64 = objEnroll.CreatePFX(
-                password, // password to protect the PFX
-                PFXExportOptions.PFXExportChainWithRoot,
-                EncodingType.XCN_CRYPT_STRING_BASE64
-            );
-            byte[] pfxBytes = Convert.FromBase64String(pfxBase64);
-            return pfxBytes;
-        }
-        else
-        {
-            return certToExport.Export(X509ContentType.Cert);
-        }
+        CX509CertificateRequestPkcs10 privateKeyContext = (CX509CertificateRequestPkcs10)
+            csrData.PrivateKeyContext;
+        PrivateKey privateKey = (CX509CertificateRequestPkcs10)csrData.PrivateKeyContext;
+        X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
+        string exportedKey = privateKeyContext.PrivateKey.Export(
+            "PRIVATEBLOB",
+            EncodingType.XCN_CRYPT_STRING_BASE64
+        );
+        byte[] keyBytes = Convert.FromBase64String(exportedKey);
+        using RSA rsa = RSA.Create();
+        rsa.ImportRSAPrivateKey(keyBytes, out _);
+        return certificate.CopyWithPrivateKey(rsa);
     }
 }
 #endif

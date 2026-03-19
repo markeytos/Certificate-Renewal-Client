@@ -183,7 +183,7 @@ public class CertificateManager(
             LogInformation($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
-            object? enrollmentContext = _certStoreService.InstallCertificate(
+            _certStoreService.InstallCertificate(
                 createdCert,
                 csrData,
                 values.LocalCertStore,
@@ -197,13 +197,7 @@ public class CertificateManager(
                     CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint
                 );
             }
-            await CheckAndSaveCertificateToPathAsync(
-                createdCert,
-                csrData,
-                enrollmentContext,
-                values.Path,
-                values.Password
-            );
+            await CheckAndSaveCertificateToPath(createdCert, csrData, values.Path, values.Password);
         }
         catch (Exception ex)
         {
@@ -219,10 +213,6 @@ public class CertificateManager(
         string? password
     )
     {
-        if (_logger == null)
-        {
-            throw new ArgumentNullException(nameof(_logger));
-        }
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
@@ -237,35 +227,14 @@ public class CertificateManager(
                 "The certificate does not have a private key to export, but the file extension indicates that the private key should be included."
             );
         }
-
-        password = CertUtils.GetOrGeneratePasswordForCert(password);
-        string passwordPath = GetPasswordPathFromCertificatePath(path);
-        await File.WriteAllTextAsync(passwordPath, password);
-        LogInformation($"Certificate private key password saved to {passwordPath}");
-
-        LogInformation($"Saving certificate to path {path}");
-        if (inBinaryForm)
-        {
-            byte[] certBytes;
-            if (includePrivateKey)
-            {
-                password = CertUtils.GetOrGeneratePasswordForCert(password);
-                certBytes = createdCert.Export(X509ContentType.Pfx, password);
-                await File.WriteAllTextAsync(passwordPath, password);
-                LogInformation($"Certificate private key password saved to {passwordPath}");
-            }
-            else
-            {
-                certBytes = createdCert.Export(X509ContentType.Cert);
-            }
-            await File.WriteAllBytesAsync(path, certBytes);
-        }
-        else
-        {
-            string pem = CryptoStaticService.ExportToPEM(createdCert);
-            await File.WriteAllTextAsync(path, pem);
-        }
-        LogInformation($"Certificate saved to {path}");
+        await WriteCertificateToFileAsync(
+            createdCert,
+            path,
+            password,
+            GetPasswordPathFromCertificatePath(path),
+            inBinaryForm,
+            includePrivateKey
+        );
     }
 
     private static string GetPasswordPathFromCertificatePath(string path)
@@ -276,10 +245,9 @@ public class CertificateManager(
         );
     }
 
-    private async Task CheckAndSaveCertificateToPathAsync(
+    private async Task CheckAndSaveCertificateToPath(
         string createdCert,
         CsrData csrData,
-        object? enrollmentContext,
         string? path,
         string? password
     )
@@ -292,14 +260,31 @@ public class CertificateManager(
         bool inBinaryForm = IsBinaryCertificateFormat(path);
         bool includePrivateKey = ShouldIncludePrivateKey(path);
 
-        byte[] certToWrite = _certStoreService.ExportCertificate(
-            createdCert,
-            csrData,
-            enrollmentContext,
-            includePrivateKey,
-            password
-        );
+        X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
+        if (includePrivateKey)
+        {
+            certToExport = _certStoreService.CopyPrivateKeyFromCsr(createdCert, csrData);
+        }
 
+        await WriteCertificateToFileAsync(
+            certToExport,
+            path,
+            password,
+            GetPasswordPathFromCertificatePath(path),
+            inBinaryForm,
+            includePrivateKey
+        );
+    }
+
+    private async Task WriteCertificateToFileAsync(
+        X509Certificate2 certToExport,
+        string path,
+        string? password,
+        string passwordPath,
+        bool inBinaryForm,
+        bool includePrivateKey
+    )
+    {
         if (_logger == null)
         {
             throw new ArgumentNullException(nameof(_logger));
@@ -307,14 +292,23 @@ public class CertificateManager(
         LogInformation($"Saving certificate to path {path}");
         if (inBinaryForm)
         {
-            await File.WriteAllBytesAsync(path, certToWrite);
+            byte[] certBytes;
+            if (includePrivateKey)
+            {
+                password = CertUtils.GetOrGeneratePasswordForCert(password);
+                certBytes = certToExport.Export(X509ContentType.Pfx, password);
+                await File.WriteAllTextAsync(passwordPath, password);
+                LogInformation($"Certificate private key password saved to {passwordPath}");
+            }
+            else
+            {
+                certBytes = certToExport.Export(X509ContentType.Cert);
+            }
+            await File.WriteAllBytesAsync(path, certBytes);
         }
         else
         {
-            X509Certificate2 pemCert = CryptoStaticService.ImportCertFromPEMString(
-                Convert.ToBase64String(certToWrite)
-            );
-            string pem = CryptoStaticService.ExportToPEM(pemCert);
+            string pem = CryptoStaticService.ExportToPEM(certToExport);
             await File.WriteAllTextAsync(path, pem);
         }
         LogInformation($"Certificate saved to {path}");
@@ -1157,7 +1151,7 @@ public class CertificateManager(
             LogInformation(
                 $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
-            object? enrollmentContext = _certStoreService.InstallCertificate(
+            _certStoreService.InstallCertificate(
                 CryptoStaticService.ExportToPEM(cert),
                 csrData,
                 localStore,
@@ -1166,10 +1160,9 @@ public class CertificateManager(
             LogInformation(
                 $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
-            await CheckAndSaveCertificateToPathAsync(
+            await CheckAndSaveCertificateToPath(
                 CryptoStaticService.ExportToPEM(cert),
                 csrData,
-                enrollmentContext,
                 path,
                 password
             );
