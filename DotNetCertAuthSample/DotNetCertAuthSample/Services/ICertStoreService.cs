@@ -13,7 +13,8 @@ public interface ICertStoreService
         bool localStore,
         List<string> ekus,
         string keyProvider = "",
-        X509KeyUsageFlags? keyUsageFlags = null
+        X509KeyUsageFlags? keyUsageFlags = null,
+        bool makePrivateKeyExportable = false
     );
 
     RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams);

@@ -27,7 +27,8 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         bool localStore,
         List<string> ekus,
         string keyProvider = "",
-        X509KeyUsageFlags? keyUsage = null
+        X509KeyUsageFlags? keyUsage = null,
+        bool makePrivateKeyExportable = false
     )
     {
         AsymmetricCipherKeyPair keyPair = GenerateKeyPair(keylength);

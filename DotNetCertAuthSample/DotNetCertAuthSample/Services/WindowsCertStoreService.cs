@@ -25,7 +25,8 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         bool localStore,
         List<string> ekus,
         string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
-        X509KeyUsageFlags? keyUsageFlags = null
+        X509KeyUsageFlags? keyUsageFlags = null,
+        bool makePrivateKeyExportable = false
     )
     {
         CX509CertificateRequestPkcs10 certRequest = new();
@@ -34,8 +35,16 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
                 ? X509CertificateEnrollmentContext.ContextMachine
                 : X509CertificateEnrollmentContext.ContextUser
         );
-        certRequest.PrivateKey.ExportPolicy =
-            X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
+        if (makePrivateKeyExportable)
+        {
+            certRequest.PrivateKey.ExportPolicy =
+                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_FLAG;
+        }
+        else
+        {
+            certRequest.PrivateKey.ExportPolicy =
+                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_NONE;
+        }
         certRequest.PrivateKey.Length = keylength;
         certRequest.PrivateKey.KeyUsage = X509PrivateKeyUsageFlags.XCN_NCRYPT_ALLOW_ALL_USAGES;
         certRequest.PrivateKey.KeySpec = X509KeySpec.XCN_AT_NONE;

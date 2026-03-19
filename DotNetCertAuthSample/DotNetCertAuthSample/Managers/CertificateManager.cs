@@ -166,6 +166,9 @@ public class CertificateManager(
             );
 
             LogInformation($"Creating CSR for certificate");
+
+            bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(values.Path);
+
             // Extract key usages from the existing certificate
             string csr = _certStoreService.CreateCSR(
                 cert.SubjectName.Name,
@@ -177,7 +180,8 @@ public class CertificateManager(
                 values.LocalCertStore,
                 [],
                 values.KeyProvider,
-                keyUsages
+                keyUsages,
+                makePrivateKeyExportable
             );
             LogInformation($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
@@ -211,6 +215,16 @@ public class CertificateManager(
             return 1;
         }
         return 0;
+    }
+
+    private bool ShouldMakePrivateKeyExportable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+        path = ParseAndCreateCertificatePath(path);
+        return ShouldIncludePrivateKey(path);
     }
 
     private async Task CheckAndSaveCertificateWithPrivateKeyToPathAsync(
@@ -1123,13 +1137,16 @@ public class CertificateManager(
             subjectName = "CN=" + subjectName;
         }
         LogInformation($"Creating CSR with subject name {subjectName}");
+        bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(path);
         string csr = _certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
             keyLength,
             localStore,
             ekus,
-            keyProvider
+            keyProvider,
+            null,
+            makePrivateKeyExportable
         );
         X509Certificate2? cert;
         if (dcCertificate)
