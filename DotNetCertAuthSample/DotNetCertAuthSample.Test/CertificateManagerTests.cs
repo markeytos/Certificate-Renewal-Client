@@ -481,6 +481,7 @@ public class CertificateManagerTests
             SCEPPassword = TestConfig.ScepPassword,
             SubjectAltNames = scepSans,
             LocalCertStore = true,
+            Password = TestConfig.CertPassword,
         };
         manager.InitializeManager(scepMachineArgs);
         int result = await manager.CallCertActionAsync();
