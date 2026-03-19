@@ -6,7 +6,7 @@ on:
       version:
         description: EZCA Client Version
         required: true
-        default: '1.2.0'
+        default: '2.0.0'
   
 env:
   GH_TOKEN: ${{ github.token }}
@@ -133,7 +133,7 @@ jobs:
         run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/windows-binary/EZCACertManager.exe --repo ${{ github.repository }}
 
       - name: Upload macOS Binary
-        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/macos-binary/EZCACertManager --repo ${{ github.repository }}
+        run: gh release upload ezca-client-v${{ inputs.version }} ./artifacts/macos-binary/EZCACertManager.zip --repo ${{ github.repository }}
 
       - name: Upload Linux Binaries
         run: |
