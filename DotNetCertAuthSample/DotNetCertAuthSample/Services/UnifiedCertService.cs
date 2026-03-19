@@ -99,11 +99,6 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         return rsa;
     }
 
-    public X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData)
-    {
-        return CertUtils.CopyPrivateKeyFromCsr(this, cert, csrData);
-    }
-
     private static string ExportCSRToPem(Pkcs10CertificationRequest pkcs10)
     {
         StringBuilder csrPemBuilder = new();

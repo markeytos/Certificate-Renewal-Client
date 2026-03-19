@@ -33,6 +33,4 @@ public interface ICertStoreService
         string templateName = "",
         string? password = null
     );
-
-    public X509Certificate2 CopyPrivateKeyFromCsr(string cert, CsrData csrData);
 }
