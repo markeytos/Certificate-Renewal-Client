@@ -1138,7 +1138,6 @@ public class CertificateManager(
         }
         LogInformation($"Creating CSR with subject name {subjectName}");
         bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(path);
-        Console.WriteLine($"make private key exportable: {makePrivateKeyExportable}");
         string csr = _certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,

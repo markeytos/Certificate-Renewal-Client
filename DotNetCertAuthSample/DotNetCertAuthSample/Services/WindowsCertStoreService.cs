@@ -172,8 +172,6 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
             password,
             X509KeyStorageFlags.Exportable
         );
-        Console.WriteLine("Certificate with private key created successfully.");
-        Console.WriteLine($"Certificate has private key: {certWithKey.HasPrivateKey}");
         return certWithKey;
     }
 
