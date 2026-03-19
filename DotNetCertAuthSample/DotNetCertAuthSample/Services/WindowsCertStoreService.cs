@@ -38,7 +38,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         if (makePrivateKeyExportable)
         {
             certRequest.PrivateKey.ExportPolicy =
-                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_FLAG;
+                X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_EXPORT_FLAG | X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_PLAINTEXT_EXPORT_FLAG;
         }
         else
         {
@@ -121,8 +121,31 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         string? password = null
     )
     {
-        certificate = LoadPrivateKeyToStore(certificate, localStore);
+        string tempPassword = CertUtils.GetOrGeneratePasswordForCert();
+        byte[] pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
+        X509KeyStorageFlags flags = localStore
+            ? X509KeyStorageFlags.MachineKeySet
+            : X509KeyStorageFlags.UserKeySet;
+        certificate = X509CertificateLoader.LoadPkcs12(pfx, tempPassword, flags);
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
+    }
+
+    public X509Certificate2 GetCertFromStore(
+    string subjectName,
+    bool localStore,
+    string issuerName = "",
+    string templateName = "",
+    string? password = null
+)
+    {
+        return CertUtils.GetCertFromStore(
+            storeService,
+            subjectName,
+            localStore,
+            issuerName,
+            templateName,
+            password
+        );
     }
 
     public X509Certificate2 AddPrivateKeyToCertificate(
@@ -145,6 +168,11 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         byte[] pfxBytes = Convert.FromBase64String(pfxBase64);
         X509Certificate2 certWithKey = X509CertificateLoader.LoadPkcs12(pfxBytes, password);
         return certWithKey;
+    }
+
+    public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams)
+    {
+        return DotNetUtilities.ToRSA(rsaParams);
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)
