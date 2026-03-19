@@ -9,12 +9,16 @@ using Org.BouncyCastle.Security;
 using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
+using EZCAClient.Services;
 
 namespace DotNetCertAuthSample.Services;
 
 public class WindowsCertService(IStoreService storeService) : ICertStoreService
 {
-    public CsrData CreateCSR(
+    private CX509CertificateRequestPkcs10? _certRequest;
+    private CX509Enrollment? _objEnroll;
+
+    public string CreateCSR(
         string subjectName,
         List<string> sans,
         int keylength,
@@ -66,12 +70,8 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         }
 
         certRequest.Encode();
-
-        return new CsrData
-        {
-            CsrPem = certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER],
-            PrivateKeyContext = certRequest,
-        };
+        _certRequest = certRequest;
+        return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
 
     private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
@@ -85,27 +85,25 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
     }
 
-    public void InstallCertificate(
-        string cert,
-        CsrData csrData,
-        bool localStore,
-        string? password = null
-    )
+    public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)
     {
-        if (csrData.PrivateKeyContext is not CX509CertificateRequestPkcs10 certRequest)
+        if (_certRequest is null)
         {
-            throw new ArgumentException("Invalid CSR context for Windows certificate installation");
+            throw new InvalidOperationException(
+                "CSR must be created before installing a certificate."
+            );
         }
-
+        string pem = CryptoStaticService.ExportToPEM(cert);
         CX509Enrollment objEnroll = new();
-        objEnroll.InitializeFromRequest(certRequest);
+        objEnroll.InitializeFromRequest(_certRequest);
         objEnroll.CreateRequest(EncodingType.XCN_CRYPT_STRING_BASE64);
         objEnroll.InstallResponse(
             InstallResponseRestrictionFlags.AllowUntrustedRoot,
-            cert,
+            pem,
             EncodingType.XCN_CRYPT_STRING_BASE64HEADER,
             null
         );
+        _objEnroll = objEnroll;
     }
 
     public void InstallCertificateWithPrivateKey(
@@ -118,42 +116,26 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         storeService.WriteCertificateWithPrivateKeyToStore(certificate, localStore, password);
     }
 
-    public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams)
-    {
-        return DotNetUtilities.ToRSA(rsaParams);
-    }
-
-    public X509Certificate2 GetCertFromStore(
-        string subjectName,
-        bool localStore,
-        string issuerName = "",
-        string templateName = "",
-        string? password = null
-    )
-    {
-        return CertUtils.GetCertFromStore(
-            storeService,
-            subjectName,
-            localStore,
-            issuerName,
-            templateName,
-            password
-        );
-    }
-
-    private static X509Certificate2 LoadPrivateKeyToStore(
+    public X509Certificate2 AddPrivateKeyToCertificate(
         X509Certificate2 certificate,
         bool localStore
     )
     {
-        // Generate a random password for temporary PFX export/import
-        string tempPassword = CertUtils.GetOrGeneratePasswordForCert();
-        byte[] pfx = certificate.Export(X509ContentType.Pfx, tempPassword);
-        X509KeyStorageFlags flags = localStore
-            ? X509KeyStorageFlags.MachineKeySet
-            : X509KeyStorageFlags.UserKeySet;
-        certificate = X509CertificateLoader.LoadPkcs12(pfx, tempPassword, flags);
-        return certificate;
+        if (_objEnroll is null)
+        {
+            throw new InvalidOperationException(
+                "CSR must be created before adding a private key to a certificate."
+            );
+        }
+        string password = CertUtils.GetOrGeneratePasswordForCert();
+        string pfxBase64 = _objEnroll.CreatePFX(
+            password,
+            PFXExportOptions.PFXExportChainWithRoot,
+            EncodingType.XCN_CRYPT_STRING_BASE64
+        );
+        byte[] pfxBytes = Convert.FromBase64String(pfxBase64);
+        X509Certificate2 certWithKey = X509CertificateLoader.LoadPkcs12(pfxBytes, password);
+        return certWithKey;
     }
 
     private static CX509ExtensionAlternativeNames CreateSans(List<string> sans)

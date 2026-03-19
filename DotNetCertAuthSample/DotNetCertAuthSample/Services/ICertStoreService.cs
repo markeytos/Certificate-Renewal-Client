@@ -6,7 +6,7 @@ namespace DotNetCertAuthSample.Services;
 
 public interface ICertStoreService
 {
-    CsrData CreateCSR(
+    string CreateCSR(
         string subjectName,
         List<string> sans,
         int keylength,
@@ -18,7 +18,7 @@ public interface ICertStoreService
 
     RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams);
 
-    void InstallCertificate(string cert, CsrData csrData, bool localStore, string? password = null);
+    void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null);
 
     void InstallCertificateWithPrivateKey(
         X509Certificate2 certificate,
@@ -32,5 +32,10 @@ public interface ICertStoreService
         string issuerName = "",
         string templateName = "",
         string? password = null
+    );
+
+    public X509Certificate2 AddPrivateKeyToCertificate(
+        X509Certificate2 certificate,
+        bool localStore
     );
 }

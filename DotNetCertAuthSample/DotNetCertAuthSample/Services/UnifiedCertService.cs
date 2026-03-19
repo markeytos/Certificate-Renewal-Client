@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using EZCAClient.Services;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
@@ -17,7 +18,9 @@ namespace DotNetCertAuthSample.Services;
 
 public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreService
 {
-    public CsrData CreateCSR(
+    private AsymmetricCipherKeyPair? _keyPair;
+
+    public string CreateCSR(
         string subjectName,
         List<string> sans,
         int keylength,
@@ -39,18 +42,14 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         );
 
         string csrPem = ExportCSRToPem(pkcs10);
-        return new CsrData { CsrPem = csrPem, PrivateKeyContext = keyPair };
+        _keyPair = keyPair;
+        return csrPem;
     }
 
-    public void InstallCertificate(
-        string cert,
-        CsrData csrData,
-        bool localStore,
-        string? password = null
-    )
+    public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)
     {
-        X509Certificate2 certificate = CertUtils.CopyPrivateKeyFromCsr(this, cert, csrData);
-        InstallCertificateWithPrivateKey(certificate, localStore, password);
+        X509Certificate2 certWithKey = AddPrivateKeyToCertificate(cert, localStore);
+        InstallCertificateWithPrivateKey(certWithKey, localStore, password);
     }
 
     public void InstallCertificateWithPrivateKey(
@@ -97,6 +96,23 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         RSA rsa = RSA.Create();
         rsa.ImportParameters(rsaParams);
         return rsa;
+    }
+
+    public X509Certificate2 AddPrivateKeyToCertificate(
+        X509Certificate2 certificate,
+        bool localStore
+    )
+    {
+        if (_keyPair is null)
+        {
+            throw new InvalidOperationException(
+                "No key pair available for exporting certificate with private key"
+            );
+        }
+
+        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)_keyPair.Private;
+        RSA rsa = ConvertToDotnetRSA(rsaParams);
+        return certificate.CopyWithPrivateKey(rsa);
     }
 
     private static string ExportCSRToPem(Pkcs10CertificationRequest pkcs10)

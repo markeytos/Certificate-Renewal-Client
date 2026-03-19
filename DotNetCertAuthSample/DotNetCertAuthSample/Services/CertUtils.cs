@@ -1,33 +1,10 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using EZCAClient.Services;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Parameters;
 
 namespace DotNetCertAuthSample.Services;
 
 public static class CertUtils
 {
-    public static X509Certificate2 CopyPrivateKeyFromCsr(
-        ICertStoreService certStoreService,
-        string cert,
-        CsrData csrData
-    )
-    {
-        if (csrData.PrivateKeyContext is not AsymmetricCipherKeyPair keyPair)
-        {
-            throw new ArgumentException("Invalid CSR context for Linux certificate installation");
-        }
-
-        X509Certificate2 certificate = CryptoStaticService.ImportCertFromPEMString(cert);
-
-        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
-        RSA rsa = certStoreService.ConvertToDotnetRSA(rsaParams);
-
-        X509Certificate2 certWithKey = certificate.CopyWithPrivateKey(rsa);
-        return certWithKey;
-    }
-
     public static string GetOrGeneratePasswordForCert(string? password = null)
     {
         if (!string.IsNullOrWhiteSpace(password))

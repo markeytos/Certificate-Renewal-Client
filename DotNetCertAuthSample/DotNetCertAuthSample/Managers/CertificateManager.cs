@@ -142,7 +142,7 @@ public class CertificateManager(
             AssertCorrectRenewArgModel(values);
 
             LogInformation(
-                $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)} store"
+                $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)}"
             );
             string domain = values.Domain!;
             X509Certificate2 cert = _certStoreService.GetCertFromStore(
@@ -167,7 +167,7 @@ public class CertificateManager(
 
             LogInformation($"Creating CSR for certificate");
             // Extract key usages from the existing certificate
-            CsrData csrData = _certStoreService.CreateCSR(
+            string csr = _certStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -179,13 +179,14 @@ public class CertificateManager(
                 values.KeyProvider,
                 keyUsages
             );
-            string csr = csrData.CsrPem;
             LogInformation($"Renewing certificate");
             EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
+            X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
+                createdCert
+            );
             _certStoreService.InstallCertificate(
-                createdCert,
-                csrData,
+                certReturned,
                 values.LocalCertStore,
                 values.Password
             );
@@ -197,7 +198,12 @@ public class CertificateManager(
                     CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint
                 );
             }
-            await CheckAndSaveCertificateToPath(createdCert, csrData, values.Path, values.Password);
+            await CheckAndSaveCertificateToPathAsync(
+                certReturned,
+                values.LocalCertStore,
+                values.Path,
+                values.Password
+            );
         }
         catch (Exception ex)
         {
@@ -207,7 +213,7 @@ public class CertificateManager(
         return 0;
     }
 
-    private async Task CheckAndSaveCertificateToPathAsync(
+    private async Task CheckAndSaveCertificateWithPrivateKeyToPathAsync(
         X509Certificate2 createdCert,
         string? path,
         string? password
@@ -245,9 +251,9 @@ public class CertificateManager(
         );
     }
 
-    private async Task CheckAndSaveCertificateToPath(
-        string createdCert,
-        CsrData csrData,
+    private async Task CheckAndSaveCertificateToPathAsync(
+        X509Certificate2 cert,
+        bool localStore,
         string? path,
         string? password
     )
@@ -260,10 +266,10 @@ public class CertificateManager(
         bool inBinaryForm = IsBinaryCertificateFormat(path);
         bool includePrivateKey = ShouldIncludePrivateKey(path);
 
-        X509Certificate2 certToExport = CryptoStaticService.ImportCertFromPEMString(createdCert);
+        X509Certificate2 certToExport = cert;
         if (includePrivateKey)
         {
-            certToExport = CertUtils.CopyPrivateKeyFromCsr(_certStoreService, createdCert, csrData);
+            certToExport = _certStoreService.AddPrivateKeyToCertificate(cert, localStore);
         }
 
         await WriteCertificateToFileAsync(
@@ -835,7 +841,7 @@ public class CertificateManager(
         LogInformation(
             $"Certificate installed successfully in {CertUtils.StoreString(localStore)} with thumbprint {cert.Thumbprint}"
         );
-        await CheckAndSaveCertificateToPathAsync(cert, path, password);
+        await CheckAndSaveCertificateWithPrivateKeyToPathAsync(cert, path, password);
         return 0;
     }
 
@@ -1117,7 +1123,7 @@ public class CertificateManager(
             subjectName = "CN=" + subjectName;
         }
         LogInformation($"Creating CSR with subject name {subjectName}");
-        CsrData csrData = _certStoreService.CreateCSR(
+        string csr = _certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
             keyLength,
@@ -1125,7 +1131,6 @@ public class CertificateManager(
             ekus,
             keyProvider
         );
-        string csr = csrData.CsrPem;
         X509Certificate2? cert;
         if (dcCertificate)
         {
@@ -1151,21 +1156,11 @@ public class CertificateManager(
             LogInformation(
                 $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
-            _certStoreService.InstallCertificate(
-                CryptoStaticService.ExportToPEM(cert),
-                csrData,
-                localStore,
-                password
-            );
+            _certStoreService.InstallCertificate(cert, localStore, password);
             LogInformation(
                 $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
-            await CheckAndSaveCertificateToPath(
-                CryptoStaticService.ExportToPEM(cert),
-                csrData,
-                path,
-                password
-            );
+            await CheckAndSaveCertificateToPathAsync(cert, localStore, path, password);
             return cert;
         }
         throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
