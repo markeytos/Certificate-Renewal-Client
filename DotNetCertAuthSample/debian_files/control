@@ -1,0 +1,7 @@
+Package: EZCACertManager
+Version: 1.0.0
+Priority: optional
+Architecture: amd64
+Maintainer: security@keytos.io
+Description: EZCA
+Homepage: https://www.keytos.io/docs/azure-pki/

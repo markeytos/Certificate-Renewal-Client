@@ -1,34 +1,33 @@
 ﻿using CommandLine;
 
-namespace DotNetCertAuthSample.Models
+namespace DotNetCertAuthSample.Models;
+
+[Verb("register", HelpText = "Registers a domain in EZCA and creates a new certificate")]
+public class RegisterArgModel
 {
-    [Verb("register", HelpText = "Registers a domain in EZCA and creates a new certificate")]
-    public class RegisterArgModel
-    {
-        [Option('d', "Domain", HelpText = "Domain for the certificate you want to create")]
-        public string? Domain { get; set; }
+    [Option('d', "Domain", HelpText = "Domain for the certificate you want to create")]
+    public string? Domain { get; set; }
 
-        [Option(
-            "AppInsights",
-            Required = false,
-            HelpText = "Azure Application Insights connection string to send logs to"
-        )]
-        public string? AppInsightsKey { get; set; }
+    [Option(
+        "AppInsights",
+        Required = false,
+        HelpText = "Azure Application Insights connection string to send logs to"
+    )]
+    public string? AppInsightsKey { get; set; }
 
-        [Option(
-            'e',
-            "EZCAInstance",
-            Required = false,
-            Default = "https://portal.ezca.io/",
-            HelpText = "EZCA instance url"
-        )]
-        public string url { get; set; } = "https://portal.ezca.io/";
+    [Option(
+        'e',
+        "EZCAInstance",
+        Required = false,
+        Default = "https://portal.ezca.io/",
+        HelpText = "EZCA instance url"
+    )]
+    public string url { get; set; } = "https://portal.ezca.io/";
 
-        [Option(
-            "caid",
-            Required = true,
-            HelpText = "CA ID of the CA you want to request the certificate from"
-        )]
-        public string caID { get; set; } = "";
-    }
-}
+    [Option(
+        "caid",
+        Required = true,
+        HelpText = "CA ID of the CA you want to request the certificate from"
+    )]
+    public string caID { get; set; } = "";
+};

@@ -1,6 +1,6 @@
 # Certificate Renewal Client
 
-At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.io/azure-pki), easy-to-use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows that can:
+At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.io/azure-pki), easy-to-use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows and Linux that can:
 
 - [Register a new domain in EZCA](#register-a-new-domain-in-ezca)
 - [Create a new certificate](#create-a-new-certificate)
@@ -8,14 +8,77 @@ At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.
 - [Create a Domain Controller Certificate](#create-a-domain-controller-certificate)
 - [Create SCEP Certificates for Non-Managed Windows Devices](#create-scep-certificates-for-non-managed-windows-devices)
 
-This application can be used in combination with Windows Task Scheduler to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
+This application can be used in combination with Windows Task Scheduler or Linux cron jobs to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
 
-## Download Signed Binary
+## Platform Support
 
-1. Navigate to the releases section
+This application supports **Windows**, **Mac**, **Linux** platforms:
+
+- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
+- **Linux**: Uses file-based certificate storage in `~/.local/share/keytos/certs` (user store) or `/etc/keytos/certs` (machine store)
+- **Mac**: Uses Mac Keychain Access
+
+**Note**: Some features are Windows-specific:
+- RDP certificate configuration (requires Windows)
+- Domain Controller certificate features (requires Active Directory)
+- Windows Certificate Store integration
+
+## Installation
+
+1. Navigate to the **Releases** section.
     <img width="1562" height="787" alt="image" src="https://github.com/user-attachments/assets/cc6dbf42-0625-48be-9a8f-348e3967e1b3" />
-1. Download the latest executable
+1. Download the latest executable for your operating system.
   <img width="1396" height="552" alt="image" src="https://github.com/user-attachments/assets/60d6c1ea-0577-4b68-8ced-539bbfac60b4" />
+
+### Windows
+
+1. Download `EZCACertManager.exe` from the [latest release](../../releases/latest).
+2. Open **PowerShell** or **Command Prompt** and navigate to the download location.
+3. Run the executable directly:
+   ```powershell
+   .\EZCACertManager.exe --help
+   ```
+4. *(Optional)* Add the directory to your `PATH` so you can run it from anywhere:
+   ```powershell
+   $env:PATH += ";C:\path\to\EZCACertManager"
+   ```
+   To make this permanent, add it via **System Properties → Environment Variables**.
+
+### MacOS
+
+1. Download `EZCACertManager` (macOS binary) from the [latest release](../../releases/latest).
+1. Open **Terminal** and navigate to the download location.
+1. Make the binary executable:
+   ```bash
+   chmod +x ./EZCACertManager
+   ```
+1. Run it:
+   ```bash
+   ./EZCACertManager --help
+   ```
+1. *(Optional)* Move it to a directory on your `PATH`:
+   ```bash
+   sudo mv ./EZCACertManager /usr/local/bin/EZCACertManager
+   ```
+   Then run from anywhere:
+   ```bash
+   EZCACertManager --help
+   ```
+
+### Linux
+
+1. Download `EZCACertManager.deb` (Linux binary) from the [latest release](../../releases/latest).
+1. Open a **terminal** and navigate to the download location.
+1. Install it:
+   ```bash
+   sudo dpkg -i ./EZCACertManager.deb
+   sudo apt -f install
+   ```
+1. Run it:
+   ```bash
+   EZCACertManager --help
+   ```
+
 
 ## Commands
 
@@ -68,24 +131,29 @@ EZCACertManager.exe create --help
 
   --caid                Required. CA ID of the CA you want to request the certificate from
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
-                        certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user
+                        store
 
   -v, --Validity        Required. Certificate validity in days
 
-  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzTenantID          Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
-  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzAppID             Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
-  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID,
-                        the Application ID and the Application Secret
+  --AzAppSecret         Optional If you want to authenticate with an Azure application you must pass you Azure TenantID, the Application ID and the
+                        Application Secret
 
   -k, --KeyLength       (Default: 4096) Certificate Key Length
 
-  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
-                        Microsoft Enhanced Cryptographic Provider v1.0)
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default: Microsoft Enhanced Cryptographic
+                        Provider v1.0)
+
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file as
+                        well.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
 
   --help                Display this help screen.
 
@@ -119,8 +187,7 @@ EZCACertManager.exe renew --help
 
   -e, --EZCAInstance    (Default: https://portal.ezca.io/) EZCA instance url
 
-  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
-                        certificate will be stored in the user store
+  --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store
 
   -t, --Template        (Default: ) Certificate Template Name
 
@@ -128,8 +195,11 @@ EZCACertManager.exe renew --help
 
   -k, --KeyLength       (Default: 4096) Certificate Key Length
 
-  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default:
-                        Microsoft Enhanced Cryptographic Provider v1.0)
+  -p, --KeyProvider     (Default: Microsoft Enhanced Cryptographic Provider v1.0) Certificate Key Provider (Default: Microsoft Enhanced Cryptographic Provider v1.0)
+
+  --Path                If specified, certificate will be saved to that path. If specified with pfx or p12 ending, private key will be saved.
+
+  --Password            Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed.
 
   --help                Display this help screen.
 
@@ -190,6 +260,10 @@ EZCACertManager.exe createDC --help
                         in addition to the Domain name. When not specified, only the Domain name is added as a SAN.
                         For example: server1.contoso.com,server2.contoso.com
 
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
+
   --help                Display this help screen.
 
   --version             Display version information.
@@ -202,7 +276,7 @@ Sample command:
 ```
 
 
-### Create SCEP Certificates for Non-Managed Windows Devices
+### Create SCEP Certificates for Unmanaged Devices
 
 If you are migrating to the cloud but not all of your devices are cloud managed or MDM managed, you can use this client to request certificates from EZCA using static SCEP for those devices. To Request a Static SCEP certificate, you will need your Static SCEP URL from EZCA, and the Static Challenge, you can find this information in the EZCA portal under the Certificate Authority details.
 ![How To Enable Static SCEP](https://github.com/user-attachments/assets/671f54bc-0669-40ab-a1e0-977fce493d22)
@@ -210,7 +284,7 @@ If you are migrating to the cloud but not all of your devices are cloud managed 
 ```powershell
 EZCACertManager.exe SCEPCertificate --help
 
-   --LocalStore          (Default: true) If the certificate should be stored in the computers Local Store. If false
+   --LocalStore          (Default: false) If the certificate should be stored in the computers Local Store. If false
                         certificate will be stored in the user store
 
   --EKUs                (Default: 1.3.6.1.5.5.7.3.2,1.3.6.1.5.5.7.3.1) EKUs requested for the certificate
@@ -228,6 +302,14 @@ EZCACertManager.exe SCEPCertificate --help
 
   --SubjectAltNames     Subject Alternate Names for this certificate for example (comma separate multiple):
                         server1.constoso.com,server2.contoso.com (If left empty it will use the computer name in your domain)
+
+  --Path                Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected.
+
+  --Password            Password for certificate file. If not provided, a random password will be generated. The password will be written to a file.
+
+  --help                Display this help screen.
+
+  --version             Display version information.
 ```
 
 Sample call:

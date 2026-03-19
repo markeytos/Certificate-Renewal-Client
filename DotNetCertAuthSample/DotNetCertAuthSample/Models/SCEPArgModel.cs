@@ -12,10 +12,10 @@ public class SCEPArgModel
     [Option(
         "LocalStore",
         Required = false,
-        Default = true,
+        Default = false,
         HelpText = "If the certificate should be stored in the computers Local Store. If false certificate will be stored in the user store"
     )]
-    public bool LocalCertStore { get; set; } = true;
+    public bool LocalCertStore { get; set; }
 
     [Option(
         "EKUs",
@@ -25,7 +25,7 @@ public class SCEPArgModel
     )]
     public string? EKUsInputs { get; set; }
     public List<string> EKUs { get; set; } =
-        [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
+    [EZCAConstants.ClientAuthenticationEKU, EZCAConstants.ServerAuthenticationEKU];
 
     [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;
@@ -57,4 +57,18 @@ public class SCEPArgModel
         HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
     )]
     public string? SubjectAltNames { get; set; }
+
+    [Option(
+        "Path",
+        Required = false,
+        HelpText = "Certificate will be saved to the specified file. If specified with pfx or p12 ending, the private key will be saved in the file and the file will be password-protected."
+    )]
+    public string? Path { get; set; }
+
+    [Option(
+        "Password",
+        Required = false,
+        HelpText = "Password for certificate file. If not provided, a random password will be generated and saved to {filename}_password.txt in the same directory as the certificate file."
+    )]
+    public string? Password { get; set; }
 }
