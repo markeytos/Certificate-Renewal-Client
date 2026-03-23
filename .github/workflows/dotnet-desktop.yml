@@ -76,6 +76,7 @@ jobs:
           export TEAM_ID="$TEAM_ID"
           export APPLE_ID="$APPLE_ID"
           export SIGNING_IDENTITY="Developer ID Application: Keytos LLC ($TEAM_ID)"
+          export VERSION="${{ inputs.version }}"
           chmod +x ./build-macos.sh
           ./build-macos.sh
 

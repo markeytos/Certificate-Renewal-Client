@@ -5,6 +5,7 @@
 # TEAM_ID
 # SIGNING_IDENTITY
 # APPLE_ID
+# VERSION
 
 BASE_PATH="./DotNetCertAuthSample"
 CSPROJ_FILE_PATH="${BASE_PATH}/DotNetCertAuthSample.csproj"
@@ -28,6 +29,7 @@ dotnet publish "$CSPROJ_FILE_PATH" \
   -p:UseAppHost=true \
   -p:PublishReadyToRun=true \
   -p:PublishSingleFile=true \
+  -p:Version="$VERSION" \
   --self-contained true
 
 echo "[INFO] Signing binary"
