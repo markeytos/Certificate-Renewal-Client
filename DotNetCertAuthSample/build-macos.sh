@@ -13,6 +13,7 @@ RELEASE_PATH="${BASE_PATH}/bin/Release"
 PUBLISH_OUTPUT_DIRECTORY="${RELEASE_PATH}/net10.0/osx-arm64/publish/"
 BINARY_PATH="${PUBLISH_OUTPUT_DIRECTORY}/EZCACertManager"
 ZIP_PATH="${PUBLISH_OUTPUT_DIRECTORY}/EZCACertManager.zip"
+FINAL_ZIP_PATH="${BASE_PATH}/EZCACertManager.zip"
 ENTITLEMENTS="./EZCACertManager.entitlements"
 
 set -eou pipefail
@@ -40,5 +41,7 @@ echo "[INFO] Submitting binary for notarization..."
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
 
 zip -j "$ZIP_PATH" "$BINARY_PATH"
+
+mv "$ZIP_PATH" "$FINAL_ZIP_PATH"
 
 echo "[INFO] Certificate Renewal Client built and notarized!"

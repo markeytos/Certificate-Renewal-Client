@@ -83,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-binary
-          path: ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager.zip
+          path: ./DotNetCertAuthSample/DotNetCertAuthSample/EZCACertManager.zip
 
   build-linux:
     name: Build client for Linux (${{ matrix.os }})
