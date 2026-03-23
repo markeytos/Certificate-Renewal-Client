@@ -1,10 +1,12 @@
 VERSION ?= 1.0.0
+CONTROL_PATH ?= ./debian_files/control
 
 EZCACertManager.deb: clean build-staging
 	dpkg-deb --root-owner-group --build ./staging_folder/ ./$@
 
 build-staging: staging_folder build-app
 	mkdir ./$</DEBIAN
+	export VERSION=${VERSION}; envsubst < ${CONTROL_PATH} > ${CONTROL_PATH}.tmp && mv ${CONTROL_PATH}.tmp ${CONTROL_PATH}
 	cp ./debian_files/control ./$</DEBIAN
 
 	# Starter script
