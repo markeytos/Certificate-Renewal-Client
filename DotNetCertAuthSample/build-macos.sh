@@ -41,7 +41,8 @@ codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 
 zip -j "$ZIP_PATH" "$BINARY_PATH"
 
-echo "[INFO] Submitting binary for notarization..."
+echo "[INFO] Submitting zip..."
+
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
 
 mv "$ZIP_PATH" "$FINAL_ZIP_PATH"
