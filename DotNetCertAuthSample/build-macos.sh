@@ -37,7 +37,7 @@ codesign --verify --verbose=4 "$BINARY_PATH"
 codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 
 echo "[INFO] Creating zip for notarization..."
-zip -j "$ZIP_PATH" "$BINARY_PATH"
+ditto -c -k --keepParent "$BINARY_PATH" "$ZIP_PATH"
 
 echo "[INFO] Submitting zip for notarization..."
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
