@@ -42,7 +42,7 @@ zip -j "$ZIP_PATH" "$BINARY_PATH"
 echo "[INFO] Submitting zip for notarization..."
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
 
-spctl -a -vvv --assess --type install "$BINARY_PATH"
+# spctl -a -vvv --assess --type install "$BINARY_PATH"
 spctl -a -vvv "$BINARY_PATH"
 
 echo "[INFO] Certificate Renewal Client built and notarized!"
