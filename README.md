@@ -6,7 +6,7 @@ At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.
 - [Create a new certificate](#create-a-new-certificate)
 - [Renew an existing certificate](#renew-an-existing-certificate)
 - [Create a Domain Controller Certificate](#create-a-domain-controller-certificate)
-- [Create SCEP Certificates for Non-Managed Windows Devices](#create-scep-certificates-for-non-managed-windows-devices)
+- [Create SCEP Certificates for Unmanaged Devices](#create-scep-certificates-for-unmanaged-devices)
 
 This application can be used in combination with Windows Task Scheduler or Linux cron jobs to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
 
@@ -71,8 +71,7 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 1. Open a **terminal** and navigate to the download location.
 1. Install it:
    ```bash
-   sudo dpkg -i ./EZCACertManager.deb
-   sudo apt -f install
+   sudo apt install ./EZCACertManager.deb
    ```
 1. Run it:
    ```bash
