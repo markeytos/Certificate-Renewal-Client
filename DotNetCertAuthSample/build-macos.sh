@@ -39,8 +39,14 @@ codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
 echo "[INFO] Creating zip for notarization..."
 zip -j "$ZIP_PATH" "$BINARY_PATH"
 
-echo "[INFO] Submitting zip..."
-
+echo "[INFO] Submitting zip for notarization..."
 xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_ID" --password "$NOTARIZE_PASSWORD" --team-id "$TEAM_ID" --wait
 
-echo "[INFO] Certificate Renewal Client Installed!"
+echo "[INFO] Stapling notarization ticket to binary..."
+xcrun stapler staple "$BINARY_PATH"
+
+echo "[INFO] Re-zipping with stapled binary..."
+rm "$ZIP_PATH"
+zip -j "$ZIP_PATH" "$BINARY_PATH"
+
+echo "[INFO] Certificate Renewal Client built and notarized!"
