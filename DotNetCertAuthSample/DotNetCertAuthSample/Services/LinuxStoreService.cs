@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Asn1.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -26,10 +27,31 @@ public class LinuxStoreService : IStoreService
         return FindCertificates(
             storePath,
             password!,
-            cert =>
-                cert.Subject.Contains(subjectName, StringComparison.OrdinalIgnoreCase)
-                || cert.SubjectName.Name.Contains(subjectName, StringComparison.OrdinalIgnoreCase)
+            cert => MatchesDistinguishedName(cert, subjectName)
         );
+    }
+
+    private static bool MatchesDistinguishedName(X509Certificate2 cert, string subjectName)
+    {
+        try
+        {
+            X509Name certSubjectDN = new(cert.Subject);
+            X509Name inputSubjectDN = new(subjectName);
+            if (!certSubjectDN.Equivalent(inputSubjectDN))
+            {
+                throw new Exception();
+            }
+            return true;
+        }
+        catch
+        {
+            string commonName = cert.GetNameInfo(X509NameType.SimpleName, false);
+            return string.Equals(
+                commonName,
+                subjectName.Replace("CN=", "").Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
     }
 
     public X509Certificate2Collection FindCertificatesByTemplate(

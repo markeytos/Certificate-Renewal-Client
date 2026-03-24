@@ -49,7 +49,7 @@ public static class CertUtils
             cert ??=
                 certs
                     .OrderByDescending(x => x.NotAfter)
-                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                    .FirstOrDefault(i => i.SubjectName.Name == subjectName)
                 ?? certs.OrderByDescending(x => x.NotAfter).First();
         }
         else
@@ -81,7 +81,7 @@ public static class CertUtils
                 cert =
                     matchingCertificates
                         .OrderByDescending(x => x.NotAfter)
-                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                        .FirstOrDefault(i => i.SubjectName.Name == subjectName)
                     ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
             }
         }

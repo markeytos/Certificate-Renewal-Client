@@ -467,6 +467,38 @@ public class CertificateManagerTests
     }
 
     [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Renew_Scep_User_Certificate_Long_Subject_Name_UserStore()
+    {
+        CertificateManager manager = CreateManager();
+        const string scepSubjectUser = "CN=user.scep.contoso.com,OU=test,O=testing,C=USA";
+        const string scepSans = "machine.contoso.com,machine2.contoso.com";
+
+        SCEPArgModel scepUserArgs = new()
+        {
+            url = TestConfig.ScepUrl,
+            SubjectName = scepSubjectUser,
+            SCEPPassword = TestConfig.ScepPassword,
+            SubjectAltNames = scepSans,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(scepUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewScepUserArgs = new()
+        {
+            Domain = scepSubjectUser,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(renewScepUserArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
     [Trait("Privilege", "Root")]
     public async Task Renew_Scep_Machine_Certificate_LocalStore()
     {

@@ -146,7 +146,7 @@ public class CertificateManager(
             );
             string domain = values.Domain!;
             X509Certificate2 cert = _certStoreService.GetCertFromStore(
-                domain.Replace("CN=", "").Trim(),
+                domain.Trim(),
                 values.LocalCertStore,
                 values.issuer,
                 values.template,
