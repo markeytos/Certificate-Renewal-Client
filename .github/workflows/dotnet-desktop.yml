@@ -31,7 +31,7 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
       - name: Run Powershell Script 
-        run: .\DotNetCertAuthSample\build.ps1
+        run: .\DotNetCertAuthSample\build.ps1 -version "${{ inputs.version }}"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -76,6 +76,7 @@ jobs:
           export TEAM_ID="$TEAM_ID"
           export APPLE_ID="$APPLE_ID"
           export SIGNING_IDENTITY="Developer ID Application: Keytos LLC ($TEAM_ID)"
+          export VERSION="${{ inputs.version }}"
           chmod +x ./build-macos.sh
           ./build-macos.sh
 
@@ -83,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-binary
-          path: ./DotNetCertAuthSample/DotNetCertAuthSample/bin/Release/net10.0/osx-arm64/publish/EZCACertManager.zip
+          path: ./DotNetCertAuthSample/DotNetCertAuthSample/EZCACertManager.zip
 
   build-linux:
     name: Build client for Linux (${{ matrix.os }})
