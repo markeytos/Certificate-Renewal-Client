@@ -27,7 +27,7 @@ public class LinuxStoreService : IStoreService
         return FindCertificates(
             storePath,
             password!,
-            cert => CertUtils.MatchesDistinguishedName(cert, subjectName)
+            cert => CertUtils.MatchesSubjectDistinguishedName(cert, subjectName)
         );
     }
 
@@ -67,9 +67,7 @@ public class LinuxStoreService : IStoreService
         return FindCertificates(
             storePath,
             password!,
-            cert =>
-                cert.Issuer.Contains(issuerName, StringComparison.OrdinalIgnoreCase)
-                || cert.IssuerName.Name.Contains(issuerName, StringComparison.OrdinalIgnoreCase)
+            cert => CertUtils.MatchesIssuerDistinguishedName(cert, issuerName)
         );
     }
 

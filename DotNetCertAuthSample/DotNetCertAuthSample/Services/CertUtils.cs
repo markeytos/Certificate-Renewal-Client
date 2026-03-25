@@ -136,7 +136,7 @@ public static class CertUtils
         return null;
     }
 
-    public static bool MatchesDistinguishedName(X509Certificate2 cert, string subjectName)
+    public static bool MatchesSubjectDistinguishedName(X509Certificate2 cert, string subjectName)
     {
         try
         {
@@ -154,6 +154,34 @@ public static class CertUtils
             return string.Equals(
                 commonName,
                 subjectName.Replace("CN=", "").Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+    }
+
+    public static bool MatchesIssuerDistinguishedName(X509Certificate2 cert, string issuerName)
+    {
+        try
+        {
+            X509Name certIssuerDN = new(cert.Issuer);
+            X509Name inputIssuerDN = new(issuerName);
+            if (!certIssuerDN.Equivalent(inputIssuerDN))
+            {
+                throw new Exception();
+            }
+            return true;
+        }
+        catch
+        {
+            X509Name certIssuerDN = new(cert.Issuer);
+            List<string> commonName = certIssuerDN.GetValueList(X509Name.CN).ToList();
+            if (commonName.Count == 0)
+            {
+                return false;
+            }
+            return string.Equals(
+                commonName[0].ToString(),
+                issuerName.Replace("CN=", "").Trim(),
                 StringComparison.OrdinalIgnoreCase
             );
         }
