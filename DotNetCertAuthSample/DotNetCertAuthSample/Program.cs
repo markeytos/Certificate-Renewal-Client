@@ -14,7 +14,7 @@ public class Program
         ICertStoreService certStoreService;
         ISystemInfoService systemInfoService;
         IStoreService storeService;
-
+        SettingsService settingsService = new();
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
 #if WINDOWS
@@ -26,7 +26,7 @@ public class Program
             return 1;
 #endif
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             storeService = new LinuxStoreService();
             certStoreService = new UnifiedCertStoreService(storeService);
@@ -44,14 +44,15 @@ public class Program
             return 1;
         }
 
-        CertificateManager certificateManager = new(certStoreService, systemInfoService);
+        CertificateManager certificateManager = new(certStoreService, systemInfoService,settingsService);
         int result = Parser
             .Default.ParseArguments<
                 RenewArgModel,
                 GenerateArgModel,
                 RegisterArgModel,
                 CreateDCCertificate,
-                SCEPArgModel
+                SCEPArgModel,
+                RenewAllArgModel
             >(args)
             .MapResult(
                 (RenewArgModel operation) => certificateManager.InitializeManager(operation),
@@ -59,6 +60,7 @@ public class Program
                 (RegisterArgModel operation) => certificateManager.InitializeManager(operation),
                 (CreateDCCertificate operation) => certificateManager.InitializeManager(operation),
                 (SCEPArgModel operation) => certificateManager.InitializeManager(operation),
+                (RenewAllArgModel operation) => certificateManager.InitializeManager(operation),
                 errs => certificateManager.ProcessError(errs)
             );
         if (result == 0)

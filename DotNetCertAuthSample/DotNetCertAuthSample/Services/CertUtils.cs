@@ -1,6 +1,8 @@
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Org.BouncyCastle.Asn1.X509;
+using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -16,6 +18,40 @@ public static class CertUtils
         const string alphanumericCharacters =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
+    }
+    public static int GetKeyLength(X509Certificate2 cert)
+    {
+        ArgumentNullException.ThrowIfNull(cert);
+
+        // RSA
+        using RSA? rsa = cert.GetRSAPublicKey();
+        if (rsa != null)
+        {
+            return rsa.KeySize;
+        }
+
+        // ECDSA
+        using ECDsa? ecdsa = cert.GetECDsaPublicKey();
+        if (ecdsa != null)
+            return ecdsa.KeySize;
+
+        throw new ArgumentException("Certificate Key not supported");
+    }
+    public static int GetPercentageOfLifetimeLeft(X509Certificate2 cert)
+    {
+        ArgumentNullException.ThrowIfNull(cert);
+        double  totalLifetime = (int)(cert.NotAfter - cert.NotBefore).TotalDays;
+        double  remainingLifetime = (int)(cert.NotAfter - DateTime.UtcNow).TotalDays;
+        if (totalLifetime <= 0)
+        {
+            return 0;
+        }
+
+        if (remainingLifetime <= 0)
+        {
+            return 0;
+        }
+        return (int)((remainingLifetime / totalLifetime) * 100);
     }
 
     public static X509Certificate2 GetCertFromStore(
@@ -94,6 +130,49 @@ public static class CertUtils
         }
         return cert;
     }
+    
+    public static X509Store GetCertStore(bool localStore)
+    {
+        return new X509Store(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
+    }
+    
+    public static string  GetAuthorityKeyIdentifier(X509Certificate2 cert)
+    {
+        ArgumentNullException.ThrowIfNull(cert);
+        X509Extension? extension = cert.Extensions["2.5.29.35"];
+        if (extension is null || extension.RawData.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        AsnReader reader = new(extension.RawData, AsnEncodingRules.DER);
+        AsnReader sequence = reader.ReadSequence();
+        Asn1Tag tag = sequence.PeekTag();
+
+        // AuthorityKeyIdentifier ::= SEQUENCE {
+        //   keyIdentifier             [0] KeyIdentifier           OPTIONAL,
+        //   authorityCertIssuer       [1] GeneralNames            OPTIONAL,
+        //   authorityCertSerialNumber [2] CertificateSerialNumber OPTIONAL
+        // }
+        //
+        // We want [0], which is the keyIdentifier.
+        if (tag is { TagClass: TagClass.ContextSpecific, TagValue: 0 })
+        {
+            byte[] keyIdentifier = sequence.ReadOctetString(
+                new Asn1Tag(TagClass.ContextSpecific, 0)
+            );
+            return Convert.ToHexString(keyIdentifier).ToLowerInvariant();
+        }
+        return string.Empty;
+    }
+
+    public static string NormalizeHex(string value) =>
+        value.Replace(":", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal)
+            .Trim()
+            .ToUpperInvariant();
+
+    
 
     public static string StoreString(bool localStore)
     {

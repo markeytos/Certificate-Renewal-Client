@@ -10,7 +10,7 @@ public class UnifiedStoreService : IStoreService
         string? password = null
     )
     {
-        X509Store store = GetCertStore(localStore);
+        X509Store store = CertUtils.GetCertStore(localStore);
         X509Certificate2[] allCerts = [];
         store.Open(OpenFlags.ReadOnly);
         try
@@ -46,6 +46,31 @@ public class UnifiedStoreService : IStoreService
             .ToArray();
         return allCerts;
     }
+    
+    
+
+    public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
+    {
+        if (string.IsNullOrWhiteSpace(caSki))
+            throw new ArgumentException("CA SKI cannot be null or empty.", nameof(caSki));
+
+        string normalizedTargetSki = CertUtils.NormalizeHex(caSki);
+
+        using X509Store store = CertUtils.GetCertStore(localStore);
+        store.Open(OpenFlags.ReadOnly);
+
+        List<X509Certificate2> certificates =  store.Certificates
+            .Cast<X509Certificate2>()
+            .Where(cert =>
+            {
+                string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
+                return !string.IsNullOrWhiteSpace(authorityKeyId) &&
+                       CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
+            })
+            .ToList();
+        store.Close();
+        return certificates;
+    }
 
     public X509Certificate2Collection FindCertificatesBySubject(
         string subjectName,
@@ -53,7 +78,7 @@ public class UnifiedStoreService : IStoreService
         string? password = null
     )
     {
-        X509Store store = GetCertStore(localStore);
+        X509Store store = CertUtils.GetCertStore(localStore);
         X509Certificate2[] allCerts = [];
         store.Open(OpenFlags.ReadOnly);
         try
@@ -123,7 +148,7 @@ public class UnifiedStoreService : IStoreService
         string? password = null
     )
     {
-        X509Store store = GetCertStore(localStore);
+        X509Store store = CertUtils.GetCertStore(localStore);
         store.Open(OpenFlags.ReadOnly);
         X509Certificate2Collection certs = store.Certificates.Find(
             X509FindType.FindByTemplateName,
@@ -139,7 +164,7 @@ public class UnifiedStoreService : IStoreService
         string? password = null
     )
     {
-        X509Store store = GetCertStore(localStore);
+        X509Store store = CertUtils.GetCertStore(localStore);
         store.Open(OpenFlags.ReadOnly);
         X509Certificate2Collection certs = store.Certificates;
         store.Close();
@@ -156,14 +181,10 @@ public class UnifiedStoreService : IStoreService
         {
             throw new Exception("Certificate does not have private key");
         }
-        X509Store store = GetCertStore(localStore);
+        X509Store store = CertUtils.GetCertStore(localStore);
         store.Open(OpenFlags.ReadWrite);
         store.Add(certificate);
         store.Close();
     }
 
-    public static X509Store GetCertStore(bool localStore)
-    {
-        return new X509Store(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
-    }
 }

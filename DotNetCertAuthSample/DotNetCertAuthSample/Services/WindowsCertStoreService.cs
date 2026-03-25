@@ -1,12 +1,10 @@
 ﻿#if WINDOWS
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
-using Org.BouncyCastle.Asn1;
-using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
-using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 using EZCAClient.Services;
@@ -83,16 +81,28 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         _certRequest = certRequest;
         return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
-
-    private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
+    
+    public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        if (keyUsageFlags == null)
-        {
-            return CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
-                | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
-        }
+        if (string.IsNullOrWhiteSpace(caSki))
+            throw new ArgumentException("CA SKI cannot be null or empty.", nameof(caSki));
 
-        return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
+        string normalizedTargetSki = CertUtils.NormalizeHex(caSki);
+
+        using X509Store store = CertUtils.GetCertStore(localStore);
+        store.Open(OpenFlags.ReadOnly);
+
+        List<X509Certificate2> certificates =  store.Certificates
+            .Cast<X509Certificate2>()
+            .Where(cert =>
+            {
+                string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
+                return !string.IsNullOrWhiteSpace(authorityKeyId) &&
+                       CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
+            })
+            .ToList();
+        store.Close();
+        return certificates;
     }
 
     public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)
@@ -256,6 +266,16 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         }
 
         return flags;
+    }
+    private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
+    {
+        if (keyUsageFlags == null)
+        {
+            return CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
+                   | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+        }
+
+        return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
     }
 }
 #endif

@@ -37,24 +37,29 @@ namespace DotNetCertAuthSample.Managers;
 
 public class CertificateManager(
     ICertStoreService certStoreService,
-    ISystemInfoService systemInfoService
+    ISystemInfoService systemInfoService, ISettingsService  settingsService
 )
 {
     private ILogger? _logger;
     private RenewArgModel? _renewArgModel;
+    private RenewAllArgModel? _renewAllArgModel;
     private GenerateArgModel? _generateArgModel;
     private RegisterArgModel? _registerArgModel;
     private CreateDCCertificate? _createDCCertArgModel;
     private SCEPArgModel? _scepArgModel;
     private readonly HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
-    private readonly ICertStoreService _certStoreService = certStoreService;
-    private readonly ISystemInfoService _systemInfoService = systemInfoService;
-
     public int InitializeManager(RenewArgModel values)
     {
         _logger = CreateLogger(values.AppInsightsKey);
         _renewArgModel = values;
+        return 0;
+    }
+
+    public int InitializeManager(RenewAllArgModel values)
+    {
+        _logger = CreateLogger(values.AppInsightsKey);
+        _renewAllArgModel = values;
         return 0;
     }
 
@@ -79,6 +84,7 @@ public class CertificateManager(
         {
             values.EKUs = values.EKUsInputs.Split(',').ToList();
         }
+
         _createDCCertArgModel = values;
         return 0;
     }
@@ -90,6 +96,7 @@ public class CertificateManager(
         {
             values.EKUs = values.EKUsInputs.Split(',').ToList();
         }
+
         _scepArgModel = values;
         return 0;
     }
@@ -122,12 +129,147 @@ public class CertificateManager(
         {
             response = await CreateSCEPCertificate(_scepArgModel);
         }
+        else if (_renewAllArgModel != null)
+        {
+            response = await RenewAllCertificatesAsync(_renewAllArgModel);
+        }
+
         if (_telemetryClient != null)
         {
             await _telemetryClient.FlushAsync(CancellationToken.None);
             Thread.Sleep(5000);
         }
+
         return response;
+    }
+
+    private async Task<int> RenewAllCertificatesAsync(RenewAllArgModel values)
+    {
+        if (_logger == null)
+        {
+            throw new ArgumentNullException(nameof(_logger));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(values.authoritySubjectKeys);
+        if (values.RenewalPercentage <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(values.RenewalPercentage));
+        }
+        int result = 0;
+        try
+        {
+            LogInformation($"Renewing certificate for {values.authoritySubjectKeys}");
+            LogInformation(
+                $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)}"
+            );
+            List<X509Certificate2> certs = new();
+            foreach (string ski in values.authoritySubjectKeys.Split(','))
+            {
+                certs.AddRange(
+                    certStoreService.GetUserCertificatesIssuedByCaSki(
+                        ski,
+                        values.LocalCertStore
+                    ));
+            }
+            if (certs.Count == 0)
+            {
+                LogInformation($"No certificate found for {values.authoritySubjectKeys}");
+                return 0;
+            }
+            LogInformation($"Retrieved  {certs.Count} certificates");
+            SettingsModel settings = settingsService.GetSettings(_logger);
+            foreach (X509Certificate2 cert in certs)
+            {
+                LogInformation($"Analyzing certificate for {cert.Subject} with thumbprint  {cert.Thumbprint}");
+                if (CertUtils.GetPercentageOfLifetimeLeft(cert) < values.RenewalPercentage)
+                {
+                    if(settings.RotatedCertificates.Any(x=> x.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)))
+                    {
+                        LogInformation("Skipping certificate with thumbprint " + cert.Thumbprint + " since it has already been rotated");
+                    }
+                    else
+                    {
+                        result += await ReneCertificatesAsync(cert, values, settings);
+                    }
+                }
+                else
+                {
+                    LogInformation($"Skipping certificate for {cert.Subject} with thumbprint  {cert.Thumbprint} since its lifetime is longer than  {values.RenewalPercentage}%");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, $"Error renewing certificates for {values.authoritySubjectKeys}");
+            return 1;
+        }
+        return result;
+    }
+
+    private async Task<int> ReneCertificatesAsync(X509Certificate2 cert, RenewAllArgModel values, SettingsModel settings)
+    {
+        try
+        {
+                X509KeyUsageFlags? keyUsages = null;
+                foreach (X509Extension ext in cert.Extensions)
+                {
+                    if (ext is X509KeyUsageExtension keyUsage)
+                    {
+                        keyUsages = keyUsage.KeyUsages;
+                        break;
+                    }
+                }
+                LogInformation(
+                    $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
+                );
+                LogInformation($"Creating CSR for certificate");
+                bool makePrivateKeyExportable = false;
+                // Extract key usages from the existing certificate
+                string csr = certStoreService.CreateCSR(
+                    cert.SubjectName.Name,
+                    GetSubjectAlternativeNames(cert)
+                        .Where(i => i.Type == SANTypes.DNSName)
+                        .Select(i => i.Value)
+                        .ToList(),
+                   CertUtils.GetKeyLength(cert),
+                    values.LocalCertStore,
+                    [],
+                    string.Empty,
+                    keyUsages,
+                    makePrivateKeyExportable
+                );
+                LogInformation("Renewing certificate");
+                EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
+                string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
+                X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
+                    createdCert
+                );
+                certStoreService.InstallCertificate(
+                    certReturned,
+                    values.LocalCertStore
+                );
+                LogInformation($"Certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} was renewed successfully");
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    APIResultModel rdpResult = systemInfoService.CheckIfRDPCertAndRenew(cert.Thumbprint, certReturned.Thumbprint);
+                    if (rdpResult.Success && string.IsNullOrWhiteSpace(rdpResult.Message))
+                    {
+                        LogInformation(rdpResult.Message);
+                    }
+                    else
+                    {
+                        LogError(new (rdpResult.Message));
+                    }
+                }
+                settings.RotatedCertificates.Add(certReturned.Thumbprint);
+                settingsService.SaveSettings( settings,_logger);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, $"Error renewing certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} {ex.Message}");
+            return 1;
+        }
+
+        return 0;
     }
 
     private async Task<int> RenewAsync(RenewArgModel values)
@@ -136,6 +278,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         try
         {
             LogInformation($"Renewing certificate for {values.Domain}");
@@ -145,7 +288,7 @@ public class CertificateManager(
                 $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)}"
             );
             string domain = values.Domain!;
-            X509Certificate2 cert = _certStoreService.GetCertFromStore(
+            X509Certificate2 cert = certStoreService.GetCertFromStore(
                 domain.Trim(),
                 values.LocalCertStore,
                 values.issuer,
@@ -161,6 +304,7 @@ public class CertificateManager(
                     break;
                 }
             }
+
             LogInformation(
                 $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
             );
@@ -170,7 +314,7 @@ public class CertificateManager(
             bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(values.Path);
 
             // Extract key usages from the existing certificate
-            string csr = _certStoreService.CreateCSR(
+            string csr = certStoreService.CreateCSR(
                 cert.SubjectName.Name,
                 GetSubjectAlternativeNames(cert)
                     .Where(i => i.Type == SANTypes.DNSName)
@@ -189,7 +333,7 @@ public class CertificateManager(
             X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
                 createdCert
             );
-            _certStoreService.InstallCertificate(
+            certStoreService.InstallCertificate(
                 certReturned,
                 values.LocalCertStore,
                 values.Password
@@ -202,6 +346,7 @@ public class CertificateManager(
                     CryptoStaticService.ImportCertFromPEMString(createdCert).Thumbprint
                 );
             }
+
             await CheckAndSaveCertificateToPathAsync(
                 certReturned,
                 values.LocalCertStore,
@@ -214,6 +359,7 @@ public class CertificateManager(
             LogError(ex, $"Error renewing certificate for {values.Domain}");
             return 1;
         }
+
         return 0;
     }
 
@@ -223,6 +369,7 @@ public class CertificateManager(
         {
             return false;
         }
+
         path = ParseAndCreateCertificatePath(path);
         return ShouldIncludePrivateKey(path);
     }
@@ -237,6 +384,7 @@ public class CertificateManager(
         {
             return;
         }
+
         path = ParseAndCreateCertificatePath(path);
         bool inBinaryForm = IsBinaryCertificateFormat(path);
         bool includePrivateKey = ShouldIncludePrivateKey(path);
@@ -247,6 +395,7 @@ public class CertificateManager(
                 "The certificate does not have a private key to export, but the file extension indicates that the private key should be included."
             );
         }
+
         await WriteCertificateToFileAsync(
             createdCert,
             path,
@@ -276,6 +425,7 @@ public class CertificateManager(
         {
             return;
         }
+
         path = ParseAndCreateCertificatePath(path);
         bool inBinaryForm = IsBinaryCertificateFormat(path);
         bool includePrivateKey = ShouldIncludePrivateKey(path);
@@ -283,7 +433,7 @@ public class CertificateManager(
         X509Certificate2 certToExport = cert;
         if (includePrivateKey)
         {
-            certToExport = _certStoreService.AddPrivateKeyToCertificate(cert, localStore);
+            certToExport = certStoreService.AddPrivateKeyToCertificate(cert, localStore);
         }
 
         await WriteCertificateToFileAsync(
@@ -309,6 +459,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         LogInformation($"Saving certificate to path {path}");
         if (inBinaryForm)
         {
@@ -324,6 +475,7 @@ public class CertificateManager(
             {
                 certBytes = certToExport.Export(X509ContentType.Cert);
             }
+
             await File.WriteAllBytesAsync(path, certBytes);
         }
         else
@@ -331,6 +483,7 @@ public class CertificateManager(
             string pem = CryptoStaticService.ExportToPEM(certToExport);
             await File.WriteAllTextAsync(path, pem);
         }
+
         LogInformation($"Certificate saved to {path}");
     }
 
@@ -340,6 +493,7 @@ public class CertificateManager(
         {
             path += ".pfx";
         }
+
         string? directory = Path.GetDirectoryName(path);
         if (directory != null && !Directory.Exists(directory))
         {
@@ -392,6 +546,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(values.Domain));
         }
+
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
@@ -404,6 +559,7 @@ public class CertificateManager(
         {
             throw new ArgumentException("RDP certificates are only supported on Windows");
         }
+
         if (rdpCert && !localCertStore)
         {
             throw new ArgumentException(
@@ -418,6 +574,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         try
         {
             ValidateGenerateArgModel(values);
@@ -460,6 +617,7 @@ public class CertificateManager(
             LogError(ex, "Error creating certificate for " + values.Domain);
             return 1;
         }
+
         return 0;
     }
 
@@ -472,6 +630,7 @@ public class CertificateManager(
         {
             throw new ArgumentException("Please enter a valid CA ID Guid");
         }
+
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
             values.Domain = GetFQDN();
@@ -480,6 +639,7 @@ public class CertificateManager(
                 throw new ArgumentNullException(nameof(values.Domain));
             }
         }
+
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
@@ -492,11 +652,13 @@ public class CertificateManager(
         {
             return;
         }
+
         Path.GetFullPath(path);
         if (string.IsNullOrWhiteSpace(Path.GetExtension(path)))
         {
             path += ".pfx";
         }
+
         if (!IsValidCertificatePathExtension(path))
         {
             throw new ArgumentException(
@@ -512,11 +674,13 @@ public class CertificateManager(
             string message = "To write to the local store, run the CLI with 'sudo -E'";
             throw new Exception(message);
         }
+
         if (!localStore && IsRunningAsRoot() && OperatingSystem.IsLinux())
         {
             string message = "To write to the user store, do not run the CLI with sudo";
             throw new Exception(message);
         }
+
         if (localStore && !IsRunningAsRoot() && OperatingSystem.IsMacOS())
         {
             string message = "To write to the local store, run the CLI with 'sudo'";
@@ -546,6 +710,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         try
         {
             bool localStore = true;
@@ -601,6 +766,7 @@ public class CertificateManager(
             Console.WriteLine("Error creating certificate: " + ex.Message);
             return 1;
         }
+
         return 0;
     }
 
@@ -611,10 +777,12 @@ public class CertificateManager(
         {
             throw new ArgumentException("Please enter a valid CA ID Guid");
         }
+
         if (!IsGuid(values.TemplateID))
         {
             throw new ArgumentException("Please enter a valid Template ID Guid");
         }
+
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
             values.Domain = GetFQDN();
@@ -623,6 +791,7 @@ public class CertificateManager(
                 throw new ArgumentNullException(nameof(values.Domain));
             }
         }
+
         if (string.IsNullOrWhiteSpace(values.SubjectName))
         {
             values.SubjectName = GetComputerSubjectName();
@@ -634,6 +803,7 @@ public class CertificateManager(
                 );
             }
         }
+
         if (values.EKUs == null || values.EKUs.Count == 0)
         {
             values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
@@ -646,6 +816,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         try
         {
             ValidateSCEPArgModel(values);
@@ -677,6 +848,7 @@ public class CertificateManager(
                 throw new ArgumentNullException(nameof(values.SubjectAltNames));
             }
         }
+
         if (string.IsNullOrWhiteSpace(values.SubjectName))
         {
             values.SubjectName = GetComputerSubjectName();
@@ -688,6 +860,7 @@ public class CertificateManager(
                 );
             }
         }
+
         if (values.EKUs is null or { Count: 0 })
         {
             values.EKUs =
@@ -696,10 +869,12 @@ public class CertificateManager(
                 EZCAConstants.ServerAuthenticationEKU,
             ];
         }
+
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
         }
+
         if (string.IsNullOrWhiteSpace(values.url))
         {
             throw new ArgumentNullException(nameof(values.url));
@@ -719,6 +894,7 @@ public class CertificateManager(
         {
             AssertCanWriteToStore(localStore);
         }
+
         if (localStore && OperatingSystem.IsLinux())
         {
             CheckPreservedUserCredentials();
@@ -780,9 +956,10 @@ public class CertificateManager(
             {
                 throw new Exception(
                     $"Failed to request SCEP certificate: {response.StatusCode} "
-                        + await response.Content.ReadAsStringAsync()
+                    + await response.Content.ReadAsStringAsync()
                 );
             }
+
             byte[] responseBytes = await response.Content.ReadAsByteArrayAsync();
             return await DecodeAndInstallSCEPCertificate(
                 responseBytes,
@@ -828,6 +1005,7 @@ public class CertificateManager(
         {
             throw new Exception("Recipient nonce does not match");
         }
+
         byte[] certBytes = signedResponse.ContentInfo.Content;
         EnvelopedCms cmsResponse = new();
         cmsResponse.Decode(signedResponse.ContentInfo.Content);
@@ -847,11 +1025,11 @@ public class CertificateManager(
         LogInformation(
             $"Installing certificate with subject {cert.Subject} to {CertUtils.StoreString(localStore)}"
         );
-        RSA rsaPrivateKey = _certStoreService.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = certStoreService.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)rsaKeyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
-        _certStoreService.InstallCertificateWithPrivateKey(cert, localStore, password);
+        certStoreService.InstallCertificateWithPrivateKey(cert, localStore, password);
         LogInformation(
             $"Certificate installed successfully in {CertUtils.StoreString(localStore)} with thumbprint {cert.Thumbprint}"
         );
@@ -895,7 +1073,8 @@ public class CertificateManager(
         certGen.SetPublicKey(keyPair.Public);
 
         // Optionally add extensions (like Basic Constraints, Key Usage, etc.)
-        certGen.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true)); // Cert is allowed to act as a CA
+        certGen.AddExtension(X509Extensions.BasicConstraints, true,
+            new BasicConstraints(true)); // Cert is allowed to act as a CA
 
         // Sign the certificate with the private key
         ISignatureFactory signatureFactory = new Asn1SignatureFactory(
@@ -906,7 +1085,7 @@ public class CertificateManager(
         X509Certificate2 cert = X509CertificateLoader.LoadCertificate(
             bouncyCastleCert.GetEncoded()
         );
-        RSA rsaPrivateKey = _certStoreService.ConvertToDotnetRSA(
+        RSA rsaPrivateKey = certStoreService.ConvertToDotnetRSA(
             (RsaPrivateCrtKeyParameters)keyPair.Private
         );
         cert = cert.CopyWithPrivateKey(rsaPrivateKey);
@@ -938,6 +1117,7 @@ public class CertificateManager(
                 subjectAlternateNames
             );
         }
+
         Asn1Encodable ekus = new ExtendedKeyUsage(
             values.EKUs.Select(oid => new DerObjectIdentifier(oid)).ToArray()
         );
@@ -987,6 +1167,7 @@ public class CertificateManager(
             keyPairGenerator.Init(keyGenerationParameters);
             return keyPairGenerator.GenerateKeyPair();
         }
+
         if (keyAlgo.Contains("ECDSA", StringComparison.OrdinalIgnoreCase))
         {
             ECKeyPairGenerator ecKeyPairGenerator = new();
@@ -1003,9 +1184,11 @@ public class CertificateManager(
             {
                 throw new NotImplementedException($"Algorithm {keyAlgo} not supported");
             }
+
             ecKeyPairGenerator.Init(ecKeyGenParams);
             return ecKeyPairGenerator.GenerateKeyPair();
         }
+
         throw new NotImplementedException($"Algorithm {keyAlgo} not supported");
     }
 
@@ -1024,11 +1207,13 @@ public class CertificateManager(
             {
                 return caCert;
             }
+
             throw new Exception(
                 "Error building chain for SCEP CA certificate: "
-                    + chain.ChainStatus[0].StatusInformation
+                + chain.ChainStatus[0].StatusInformation
             );
         }
+
         throw new Exception(
             "Error getting SCEP CA certificate: " + await caResponse.Content.ReadAsStringAsync()
         );
@@ -1036,7 +1221,7 @@ public class CertificateManager(
 
     private string GetComputerSubjectName()
     {
-        return SystemInfoUtils.GetComputerSubjectName(_systemInfoService);
+        return SystemInfoUtils.GetComputerSubjectName(systemInfoService);
     }
 
     private static string GetFQDN(string computerName = "")
@@ -1050,6 +1235,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         try
         {
             ValidateRegisterArgModel(values);
@@ -1067,6 +1253,7 @@ public class CertificateManager(
                     $"Could not register new domain in EZCA {registrationResult.Message}"
                 );
             }
+
             LogInformation($"Successfully registered domain: {values.Domain}");
         }
         catch (Exception ex)
@@ -1074,6 +1261,7 @@ public class CertificateManager(
             LogError(ex, "Error registering domain");
             return 1;
         }
+
         return 0;
     }
 
@@ -1083,6 +1271,7 @@ public class CertificateManager(
         {
             throw new ArgumentException("Please enter a valid CA ID Guid");
         }
+
         if (string.IsNullOrWhiteSpace(values.Domain))
         {
             values.Domain = GetFQDN();
@@ -1095,7 +1284,7 @@ public class CertificateManager(
 
     private void SetRDPCertificate(string thumbprint)
     {
-        _systemInfoService.SetRDPCertificate(thumbprint);
+        systemInfoService.SetRDPCertificate(thumbprint);
     }
 
     private async Task<X509Certificate2> CreateCertificateAsync(
@@ -1119,6 +1308,7 @@ public class CertificateManager(
         {
             throw new ArgumentNullException(nameof(_logger));
         }
+
         if (validity <= 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -1126,10 +1316,12 @@ public class CertificateManager(
                 "Error certificate validity has to be greater than 0"
             );
         }
+
         if (keyLength != 2048 && keyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
         }
+
         // Start with domain as first SAN
         List<string> subjectAltNames = [domain];
 
@@ -1149,9 +1341,10 @@ public class CertificateManager(
         {
             subjectName = "CN=" + subjectName;
         }
+
         LogInformation($"Creating CSR with subject name {subjectName}");
         bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(path);
-        string csr = _certStoreService.CreateCSR(
+        string csr = certStoreService.CreateCSR(
             subjectName,
             subjectAltNames,
             keyLength,
@@ -1186,13 +1379,14 @@ public class CertificateManager(
             LogInformation(
                 $"Installing Certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
-            _certStoreService.InstallCertificate(cert, localStore, password);
+            certStoreService.InstallCertificate(cert, localStore, password);
             LogInformation(
                 $"Successfully created certificate for {domain} with thumbprint {cert.Thumbprint}"
             );
             await CheckAndSaveCertificateToPathAsync(cert, localStore, path, password);
             return cert;
         }
+
         throw new CryptographicException($"Error requesting EZCA certificate for {domain}");
     }
 
@@ -1203,11 +1397,13 @@ public class CertificateManager(
         {
             throw new NullReferenceException("Could not find any available CAs in EZCA");
         }
+
         AvailableCAModel? selectedCA = availableCAs.FirstOrDefault(i => i.CAID == caID);
         if (selectedCA != null)
         {
             return selectedCA;
         }
+
         throw new ArgumentOutOfRangeException(
             $"No CA with CA ID {caID} was found, make sure you have access to request from this CA"
         );
@@ -1227,6 +1423,7 @@ public class CertificateManager(
         {
             return new DefaultAzureCredential(includeInteractiveCredentials: true);
         }
+
         return new ClientSecretCredential(tenantID, clientID, clientSecret);
     }
 
@@ -1236,6 +1433,7 @@ public class CertificateManager(
         {
             return new AzureCliCredential();
         }
+
         return new DefaultAzureCredential(includeInteractiveCredentials: true);
     }
 
@@ -1253,6 +1451,7 @@ public class CertificateManager(
                     configureApplicationInsightsLoggerOptions: (_) => { }
                 );
             }
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 builder.AddEventLog();
@@ -1266,11 +1465,13 @@ public class CertificateManager(
         {
             services.AddSingleton<TelemetryClient>();
         }
+
         IServiceProvider serviceProvider = services.BuildServiceProvider();
         if (!string.IsNullOrWhiteSpace(appInsightsKey))
         {
             _telemetryClient = serviceProvider.GetRequiredService<TelemetryClient>();
         }
+
         return serviceProvider.GetRequiredService<ILogger<Program>>();
     }
 
@@ -1280,6 +1481,7 @@ public class CertificateManager(
         {
             return false;
         }
+
         return Guid.TryParse(value, out _);
     }
 
@@ -1346,6 +1548,7 @@ public class CertificateManager(
                         {
                             x509SubjectAlternativeName.Value = generalName.Name.ToString() ?? "";
                         }
+
                         break;
                     default:
                         x509SubjectAlternativeName.Type = SANTypes.Unknown;
@@ -1381,6 +1584,7 @@ public class CertificateManager(
         {
             message = ex.Message;
         }
+
         _logger.LogError(ex, message);
         Console.WriteLine($"{message}: {ex}");
     }
