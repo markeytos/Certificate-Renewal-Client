@@ -1,5 +1,4 @@
 using System.Security.Cryptography.X509Certificates;
-using Org.BouncyCastle.Asn1.X509;
 
 namespace DotNetCertAuthSample.Services;
 

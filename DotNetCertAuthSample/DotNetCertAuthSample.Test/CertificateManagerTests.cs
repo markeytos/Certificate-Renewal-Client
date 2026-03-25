@@ -659,9 +659,9 @@ public class CertificateManagerTests
     }
 
     [Fact]
-    [Trait("Privilege", "User")]
+    [Trait("Privilege", "Root")]
     [Trait("OS", "Windows")]
-    public async Task Create_User_Certificate_UserStore_RDP()
+    public async Task Create_User_Certificate_LocalStore_RDP()
     {
         CertificateManager manager = CreateManager();
         string domainUser = $"{NewDomain()}_RDP";
