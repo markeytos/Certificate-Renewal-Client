@@ -44,7 +44,11 @@ public class Program
             return 1;
         }
 
-        CertificateManager certificateManager = new(certStoreService, systemInfoService,settingsService);
+        CertificateManager certificateManager = new(
+            certStoreService,
+            systemInfoService,
+            settingsService
+        );
         int result = Parser
             .Default.ParseArguments<
                 RenewArgModel,

@@ -34,7 +34,7 @@ public class WindowsSystemInfoService : ISystemInfoService
         string queryDialect = "WQL";
         string query = "SELECT * FROM Win32_TSGeneralSetting WHERE TerminalName = 'RDP-Tcp'";
         string thumbprintProperty = "SSLCertificateSHA1Hash";
-        DComSessionOptions dComOpts = new ()
+        DComSessionOptions dComOpts = new()
         {
             Culture = CultureInfo.CurrentCulture,
             UICulture = CultureInfo.CurrentUICulture,
@@ -59,14 +59,14 @@ public class WindowsSystemInfoService : ISystemInfoService
             cimSession.ModifyInstance(instance);
         }
     }
-    
+
     public APIResultModel CheckIfRDPCertAndRenew(string oldCertThumbprint, string newCertThumbprint)
     {
         string namespaceValue = @"root\cimv2\TerminalServices";
         string queryDialect = "WQL";
         string query = "SELECT * FROM Win32_TSGeneralSetting WHERE TerminalName = 'RDP-Tcp'";
         string thumbprintProperty = "SSLCertificateSHA1Hash";
-        DComSessionOptions dComOpts = new ()
+        DComSessionOptions dComOpts = new()
         {
             Culture = CultureInfo.CurrentCulture,
             UICulture = CultureInfo.CurrentUICulture,
@@ -81,9 +81,11 @@ public class WindowsSystemInfoService : ISystemInfoService
             .FirstOrDefault();
         if (instance == null)
         {
-            return new(false,"Error getting RDP service");
+            return new(false, "Error getting RDP service");
         }
-        string currentThumbprint = NormalizeThumbprint(instance.CimInstanceProperties[thumbprintProperty].Value?.ToString());
+        string currentThumbprint = NormalizeThumbprint(
+            instance.CimInstanceProperties[thumbprintProperty].Value?.ToString()
+        );
         if (currentThumbprint != oldCertThumbprint)
         {
             return new(true, "");
@@ -93,7 +95,7 @@ public class WindowsSystemInfoService : ISystemInfoService
         cimSession.ModifyInstance(instance);
         return new(true, "RDP certificate updated successfully");
     }
-    
+
     private static string NormalizeThumbprint(string? thumbprint) =>
         (thumbprint ?? string.Empty).Replace(" ", string.Empty).Trim().ToUpperInvariant();
 }

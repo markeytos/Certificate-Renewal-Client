@@ -46,8 +46,6 @@ public class UnifiedStoreService : IStoreService
             .ToArray();
         return allCerts;
     }
-    
-    
 
     public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
@@ -59,13 +57,13 @@ public class UnifiedStoreService : IStoreService
         using X509Store store = CertUtils.GetCertStore(localStore);
         store.Open(OpenFlags.ReadOnly);
 
-        List<X509Certificate2> certificates =  store.Certificates
-            .Cast<X509Certificate2>()
+        List<X509Certificate2> certificates = store
+            .Certificates.Cast<X509Certificate2>()
             .Where(cert =>
             {
                 string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
-                return !string.IsNullOrWhiteSpace(authorityKeyId) &&
-                       CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
+                return !string.IsNullOrWhiteSpace(authorityKeyId)
+                    && CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
             })
             .ToList();
         store.Close();
@@ -186,5 +184,4 @@ public class UnifiedStoreService : IStoreService
         store.Add(certificate);
         store.Close();
     }
-
 }

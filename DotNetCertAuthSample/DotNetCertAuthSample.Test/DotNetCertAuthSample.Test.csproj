@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks Condition="$([MSBuild]::IsOsPlatform('Windows'))">net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOsPlatform('Windows'))"
+      >net10.0;net10.0-windows</TargetFrameworks
+    >
     <TargetFrameworks Condition="!$([MSBuild]::IsOsPlatform('Windows'))">net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -27,4 +29,3 @@
     <ProjectReference Include="..\DotNetCertAuthSample\DotNetCertAuthSample.csproj" />
   </ItemGroup>
 </Project>
-

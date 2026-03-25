@@ -6,6 +6,4 @@ public class SettingsModel
 {
     [JsonPropertyName("RotatedCertificates")]
     public List<string> RotatedCertificates { get; set; } = new();
-
-    
 }

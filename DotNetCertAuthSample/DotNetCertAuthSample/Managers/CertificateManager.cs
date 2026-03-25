@@ -37,7 +37,8 @@ namespace DotNetCertAuthSample.Managers;
 
 public class CertificateManager(
     ICertStoreService certStoreService,
-    ISystemInfoService systemInfoService, ISettingsService  settingsService
+    ISystemInfoService systemInfoService,
+    ISettingsService settingsService
 )
 {
     private ILogger? _logger;
@@ -49,6 +50,7 @@ public class CertificateManager(
     private SCEPArgModel? _scepArgModel;
     private readonly HttpClient _httpClient = new();
     private TelemetryClient? _telemetryClient;
+
     public int InitializeManager(RenewArgModel values)
     {
         _logger = CreateLogger(values.AppInsightsKey);
@@ -165,10 +167,8 @@ public class CertificateManager(
             foreach (string ski in values.authoritySubjectKeys.Split(','))
             {
                 certs.AddRange(
-                    certStoreService.GetUserCertificatesIssuedByCaSki(
-                        ski,
-                        values.LocalCertStore
-                    ));
+                    certStoreService.GetUserCertificatesIssuedByCaSki(ski, values.LocalCertStore)
+                );
             }
             if (certs.Count == 0)
             {
@@ -179,12 +179,22 @@ public class CertificateManager(
             SettingsModel settings = settingsService.GetSettings(_logger);
             foreach (X509Certificate2 cert in certs)
             {
-                LogInformation($"Analyzing certificate for {cert.Subject} with thumbprint  {cert.Thumbprint}");
+                LogInformation(
+                    $"Analyzing certificate for {cert.Subject} with thumbprint  {cert.Thumbprint}"
+                );
                 if (CertUtils.GetPercentageOfLifetimeLeft(cert) < values.RenewalPercentage)
                 {
-                    if(settings.RotatedCertificates.Any(x=> x.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)))
+                    if (
+                        settings.RotatedCertificates.Any(x =>
+                            x.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)
+                        )
+                    )
                     {
-                        LogInformation("Skipping certificate with thumbprint " + cert.Thumbprint + " since it has already been rotated");
+                        LogInformation(
+                            "Skipping certificate with thumbprint "
+                                + cert.Thumbprint
+                                + " since it has already been rotated"
+                        );
                     }
                     else
                     {
@@ -193,7 +203,9 @@ public class CertificateManager(
                 }
                 else
                 {
-                    LogInformation($"Skipping certificate for {cert.Subject} with thumbprint  {cert.Thumbprint} since its lifetime is longer than  {values.RenewalPercentage}%");
+                    LogInformation(
+                        $"Skipping certificate for {cert.Subject} with thumbprint  {cert.Thumbprint} since its lifetime is longer than  {values.RenewalPercentage}%"
+                    );
                 }
             }
         }
@@ -205,67 +217,76 @@ public class CertificateManager(
         return result;
     }
 
-    private async Task<int> ReneCertificatesAsync(X509Certificate2 cert, RenewAllArgModel values, SettingsModel settings)
+    private async Task<int> ReneCertificatesAsync(
+        X509Certificate2 cert,
+        RenewAllArgModel values,
+        SettingsModel settings
+    )
     {
         try
         {
-                X509KeyUsageFlags? keyUsages = null;
-                foreach (X509Extension ext in cert.Extensions)
+            X509KeyUsageFlags? keyUsages = null;
+            foreach (X509Extension ext in cert.Extensions)
+            {
+                if (ext is X509KeyUsageExtension keyUsage)
                 {
-                    if (ext is X509KeyUsageExtension keyUsage)
-                    {
-                        keyUsages = keyUsage.KeyUsages;
-                        break;
-                    }
+                    keyUsages = keyUsage.KeyUsages;
+                    break;
                 }
-                LogInformation(
-                    $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
+            }
+            LogInformation(
+                $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
+            );
+            LogInformation($"Creating CSR for certificate");
+            bool makePrivateKeyExportable = false;
+            // Extract key usages from the existing certificate
+            string csr = certStoreService.CreateCSR(
+                cert.SubjectName.Name,
+                GetSubjectAlternativeNames(cert)
+                    .Where(i => i.Type == SANTypes.DNSName)
+                    .Select(i => i.Value)
+                    .ToList(),
+                CertUtils.GetKeyLength(cert),
+                values.LocalCertStore,
+                [],
+                string.Empty,
+                keyUsages,
+                makePrivateKeyExportable
+            );
+            LogInformation("Renewing certificate");
+            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
+            string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
+            X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
+                createdCert
+            );
+            certStoreService.InstallCertificate(certReturned, values.LocalCertStore);
+            LogInformation(
+                $"Certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} was renewed successfully"
+            );
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                APIResultModel rdpResult = systemInfoService.CheckIfRDPCertAndRenew(
+                    cert.Thumbprint,
+                    certReturned.Thumbprint
                 );
-                LogInformation($"Creating CSR for certificate");
-                bool makePrivateKeyExportable = false;
-                // Extract key usages from the existing certificate
-                string csr = certStoreService.CreateCSR(
-                    cert.SubjectName.Name,
-                    GetSubjectAlternativeNames(cert)
-                        .Where(i => i.Type == SANTypes.DNSName)
-                        .Select(i => i.Value)
-                        .ToList(),
-                   CertUtils.GetKeyLength(cert),
-                    values.LocalCertStore,
-                    [],
-                    string.Empty,
-                    keyUsages,
-                    makePrivateKeyExportable
-                );
-                LogInformation("Renewing certificate");
-                EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
-                string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
-                X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
-                    createdCert
-                );
-                certStoreService.InstallCertificate(
-                    certReturned,
-                    values.LocalCertStore
-                );
-                LogInformation($"Certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} was renewed successfully");
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (rdpResult.Success && string.IsNullOrWhiteSpace(rdpResult.Message))
                 {
-                    APIResultModel rdpResult = systemInfoService.CheckIfRDPCertAndRenew(cert.Thumbprint, certReturned.Thumbprint);
-                    if (rdpResult.Success && string.IsNullOrWhiteSpace(rdpResult.Message))
-                    {
-                        LogInformation(rdpResult.Message);
-                    }
-                    else
-                    {
-                        LogError(new (rdpResult.Message));
-                    }
+                    LogInformation(rdpResult.Message);
                 }
-                settings.RotatedCertificates.Add(certReturned.Thumbprint);
-                settingsService.SaveSettings( settings,_logger);
+                else
+                {
+                    LogError(new(rdpResult.Message));
+                }
+            }
+            settings.RotatedCertificates.Add(certReturned.Thumbprint);
+            settingsService.SaveSettings(settings, _logger);
         }
         catch (Exception ex)
         {
-            LogError(ex, $"Error renewing certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} {ex.Message}");
+            LogError(
+                ex,
+                $"Error renewing certificate {cert.SubjectName} with thumbprint {cert.Thumbprint} {ex.Message}"
+            );
             return 1;
         }
 
@@ -956,7 +977,7 @@ public class CertificateManager(
             {
                 throw new Exception(
                     $"Failed to request SCEP certificate: {response.StatusCode} "
-                    + await response.Content.ReadAsStringAsync()
+                        + await response.Content.ReadAsStringAsync()
                 );
             }
 
@@ -1073,8 +1094,7 @@ public class CertificateManager(
         certGen.SetPublicKey(keyPair.Public);
 
         // Optionally add extensions (like Basic Constraints, Key Usage, etc.)
-        certGen.AddExtension(X509Extensions.BasicConstraints, true,
-            new BasicConstraints(true)); // Cert is allowed to act as a CA
+        certGen.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true)); // Cert is allowed to act as a CA
 
         // Sign the certificate with the private key
         ISignatureFactory signatureFactory = new Asn1SignatureFactory(
@@ -1210,7 +1230,7 @@ public class CertificateManager(
 
             throw new Exception(
                 "Error building chain for SCEP CA certificate: "
-                + chain.ChainStatus[0].StatusInformation
+                    + chain.ChainStatus[0].StatusInformation
             );
         }
 

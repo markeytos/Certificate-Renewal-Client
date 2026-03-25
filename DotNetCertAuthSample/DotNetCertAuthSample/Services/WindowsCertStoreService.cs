@@ -81,7 +81,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         _certRequest = certRequest;
         return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
-    
+
     public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
         if (string.IsNullOrWhiteSpace(caSki))
@@ -92,13 +92,13 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         using X509Store store = CertUtils.GetCertStore(localStore);
         store.Open(OpenFlags.ReadOnly);
 
-        List<X509Certificate2> certificates =  store.Certificates
-            .Cast<X509Certificate2>()
+        List<X509Certificate2> certificates = store
+            .Certificates.Cast<X509Certificate2>()
             .Where(cert =>
             {
                 string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
-                return !string.IsNullOrWhiteSpace(authorityKeyId) &&
-                       CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
+                return !string.IsNullOrWhiteSpace(authorityKeyId)
+                    && CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
             })
             .ToList();
         store.Close();
@@ -267,12 +267,13 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
 
         return flags;
     }
+
     private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
     {
         if (keyUsageFlags == null)
         {
             return CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
-                   | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+                | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
         }
 
         return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);

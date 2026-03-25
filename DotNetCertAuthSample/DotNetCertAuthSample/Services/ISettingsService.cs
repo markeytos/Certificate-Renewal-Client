@@ -17,39 +17,32 @@ public class SettingsService : ISettingsService
     public SettingsModel GetSettings(ILogger? logger)
     {
         string settingsFolder = "certClient";
-        string path = CreateFilePath("certClientSettings.json",settingsFolder);
+        string path = CreateFilePath("certClientSettings.json", settingsFolder);
         string settingsString = GetFullFile(path, logger, true);
         SettingsModel result;
         if (string.IsNullOrWhiteSpace(settingsString))
         {
-            result = new SettingsModel() ;
+            result = new SettingsModel();
             settingsString = JsonSerializer.Serialize(result);
-            WriteToFile(path, settingsString, logger,settingsFolder);
+            WriteToFile(path, settingsString, logger, settingsFolder);
         }
         else
         {
-            result =
-                JsonSerializer.Deserialize<SettingsModel>(settingsString)
-                ?? new() ;
+            result = JsonSerializer.Deserialize<SettingsModel>(settingsString) ?? new();
         }
         return result;
     }
-    
+
     public void SaveSettings(SettingsModel settings, ILogger? logger)
     {
         string settingsFolder = "certClient";
-        string path = CreateFilePath("certClientSettings.json",settingsFolder);
-        
+        string path = CreateFilePath("certClientSettings.json", settingsFolder);
+
         string settingsString = JsonSerializer.Serialize(settings);
-        WriteToFile(path, settingsString, logger,settingsFolder);
+        WriteToFile(path, settingsString, logger, settingsFolder);
     }
-    
-    private static void WriteToFile(
-        string path,
-        string content,
-        ILogger? logger,
-        string folder 
-    )
+
+    private static void WriteToFile(string path, string content, ILogger? logger, string folder)
     {
         path = CreateFilePath(path, folder);
         try
@@ -68,12 +61,8 @@ public class SettingsService : ISettingsService
             }
         }
     }
-    
-    private static string GetFullFile(
-        string filepath,
-        ILogger? logger,
-        bool suppressError = false
-    )
+
+    private static string GetFullFile(string filepath, ILogger? logger, bool suppressError = false)
     {
         string content = string.Empty;
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -93,7 +82,7 @@ public class SettingsService : ISettingsService
         }
         return content;
     }
-    
+
     private static string CreateFilePath(string fileName, string folder)
     {
         string path;

@@ -19,6 +19,7 @@ public static class CertUtils
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
     }
+
     public static int GetKeyLength(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
@@ -37,11 +38,12 @@ public static class CertUtils
 
         throw new ArgumentException("Certificate Key not supported");
     }
+
     public static int GetPercentageOfLifetimeLeft(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
-        double  totalLifetime = (int)(cert.NotAfter - cert.NotBefore).TotalDays;
-        double  remainingLifetime = (int)(cert.NotAfter - DateTime.UtcNow).TotalDays;
+        double totalLifetime = (int)(cert.NotAfter - cert.NotBefore).TotalDays;
+        double remainingLifetime = (int)(cert.NotAfter - DateTime.UtcNow).TotalDays;
         if (totalLifetime <= 0)
         {
             return 0;
@@ -130,13 +132,13 @@ public static class CertUtils
         }
         return cert;
     }
-    
+
     public static X509Store GetCertStore(bool localStore)
     {
         return new X509Store(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
     }
-    
-    public static string  GetAuthorityKeyIdentifier(X509Certificate2 cert)
+
+    public static string GetAuthorityKeyIdentifier(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
         X509Extension? extension = cert.Extensions["2.5.29.35"];
@@ -167,12 +169,11 @@ public static class CertUtils
     }
 
     public static string NormalizeHex(string value) =>
-        value.Replace(":", "", StringComparison.Ordinal)
+        value
+            .Replace(":", "", StringComparison.Ordinal)
             .Replace(" ", "", StringComparison.Ordinal)
             .Trim()
             .ToUpperInvariant();
-
-    
 
     public static string StoreString(bool localStore)
     {

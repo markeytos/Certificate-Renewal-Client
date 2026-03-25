@@ -137,7 +137,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         CryptoApiRandomGenerator randomGenerator = new();
         SecureRandom random = new(randomGenerator);
         KeyGenerationParameters keyGenerationParameters = new(random, keyLength);
-        if(keyLength >= 2048)
+        if (keyLength >= 2048)
         {
             RsaKeyPairGenerator keyPairGenerator = new();
             keyPairGenerator.Init(keyGenerationParameters);
