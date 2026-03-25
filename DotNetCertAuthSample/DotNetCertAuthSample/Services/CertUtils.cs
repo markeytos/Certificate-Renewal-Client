@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Asn1.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -133,5 +134,28 @@ public static class CertUtils
             }
         }
         return null;
+    }
+
+    public static bool MatchesDistinguishedName(X509Certificate2 cert, string subjectName)
+    {
+        try
+        {
+            X509Name certSubjectDN = new(cert.Subject);
+            X509Name inputSubjectDN = new(subjectName);
+            if (!certSubjectDN.Equivalent(inputSubjectDN))
+            {
+                throw new Exception();
+            }
+            return true;
+        }
+        catch
+        {
+            string commonName = cert.GetNameInfo(X509NameType.SimpleName, false);
+            return string.Equals(
+                commonName,
+                subjectName.Replace("CN=", "").Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
     }
 }

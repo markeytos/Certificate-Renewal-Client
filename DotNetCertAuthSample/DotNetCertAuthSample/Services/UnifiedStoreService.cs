@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Asn1.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -29,13 +30,37 @@ public class UnifiedStoreService : IStoreService
     {
         X509Store store = GetCertStore(localStore);
         store.Open(OpenFlags.ReadOnly);
-        X509Certificate2Collection certs = store.Certificates.Find(
+        X509Certificate2Collection certsSearch1 = store.Certificates.Find(
             X509FindType.FindBySubjectName,
             subjectName,
             true
         );
+        X509Certificate2Collection certsSearch2 = store.Certificates.Find(
+            X509FindType.FindBySubjectDistinguishedName,
+            subjectName,
+            true
+        );
+        X509Certificate2Collection certsSearch3 = FindByDistinguishedName(store, subjectName);
         store.Close();
-        return certs;
+        X509Certificate2[] allCerts = certsSearch1
+            .Cast<X509Certificate2>()
+            .Concat(certsSearch2.Cast<X509Certificate2>())
+            .Concat(certsSearch3.Cast<X509Certificate2>())
+            .DistinctBy(c => c.Thumbprint)
+            .ToArray();
+        return new X509Certificate2Collection(allCerts);
+    }
+
+    private static X509Certificate2Collection FindByDistinguishedName(
+        X509Store store,
+        string subjectName
+    )
+    {
+        X509Certificate2Collection allCerts = store.Certificates;
+        List<X509Certificate2> matchingCerts = allCerts
+            .Where((cert) => CertUtils.MatchesDistinguishedName(cert, subjectName))
+            .ToList();
+        return new X509Certificate2Collection(matchingCerts.ToArray());
     }
 
     public X509Certificate2Collection FindCertificatesByTemplate(

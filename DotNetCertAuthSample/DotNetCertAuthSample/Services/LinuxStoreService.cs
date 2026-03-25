@@ -27,31 +27,8 @@ public class LinuxStoreService : IStoreService
         return FindCertificates(
             storePath,
             password!,
-            cert => MatchesDistinguishedName(cert, subjectName)
+            cert => CertUtils.MatchesDistinguishedName(cert, subjectName)
         );
-    }
-
-    private static bool MatchesDistinguishedName(X509Certificate2 cert, string subjectName)
-    {
-        try
-        {
-            X509Name certSubjectDN = new(cert.Subject);
-            X509Name inputSubjectDN = new(subjectName);
-            if (!certSubjectDN.Equivalent(inputSubjectDN))
-            {
-                throw new Exception();
-            }
-            return true;
-        }
-        catch
-        {
-            string commonName = cert.GetNameInfo(X509NameType.SimpleName, false);
-            return string.Equals(
-                commonName,
-                subjectName.Replace("CN=", "").Trim(),
-                StringComparison.OrdinalIgnoreCase
-            );
-        }
     }
 
     public X509Certificate2Collection FindCertificatesByTemplate(
