@@ -11,7 +11,22 @@ public class UnifiedStoreService : IStoreService
     )
     {
         X509Store store = GetCertStore(localStore);
+        X509Certificate2[] allCerts = [];
         store.Open(OpenFlags.ReadOnly);
+        try
+        {
+            allCerts = FindCertificatesByIssuer(issuerName, store);
+        }
+        finally
+        {
+            store.Close();
+        }
+        return new X509Certificate2Collection(allCerts);
+    }
+
+    private static X509Certificate2[] FindCertificatesByIssuer(string issuerName, X509Store store)
+    {
+        X509Certificate2[] allCerts;
         X509Certificate2Collection certsSearch1 = store.Certificates.Find(
             X509FindType.FindByIssuerName,
             issuerName,
@@ -23,14 +38,13 @@ public class UnifiedStoreService : IStoreService
             true
         );
         X509Certificate2Collection certsSearch3 = FindByIssuerDistinguishedName(store, issuerName);
-        store.Close();
-        X509Certificate2[] allCerts = certsSearch1
+        allCerts = certsSearch1
             .Cast<X509Certificate2>()
             .Concat(certsSearch2.Cast<X509Certificate2>())
             .Concat(certsSearch3.Cast<X509Certificate2>())
             .DistinctBy(c => c.Thumbprint)
             .ToArray();
-        return new X509Certificate2Collection(allCerts);
+        return allCerts;
     }
 
     public X509Certificate2Collection FindCertificatesBySubject(
@@ -40,7 +54,22 @@ public class UnifiedStoreService : IStoreService
     )
     {
         X509Store store = GetCertStore(localStore);
+        X509Certificate2[] allCerts = [];
         store.Open(OpenFlags.ReadOnly);
+        try
+        {
+            allCerts = FindCertificatesBySubject(subjectName, store);
+        }
+        finally
+        {
+            store.Close();
+        }
+        return new X509Certificate2Collection(allCerts);
+    }
+
+    private static X509Certificate2[] FindCertificatesBySubject(string subjectName, X509Store store)
+    {
+        X509Certificate2[] allCerts;
         X509Certificate2Collection certsSearch1 = store.Certificates.Find(
             X509FindType.FindBySubjectName,
             subjectName,
@@ -55,14 +84,13 @@ public class UnifiedStoreService : IStoreService
             store,
             subjectName
         );
-        store.Close();
-        X509Certificate2[] allCerts = certsSearch1
+        allCerts = certsSearch1
             .Cast<X509Certificate2>()
             .Concat(certsSearch2.Cast<X509Certificate2>())
             .Concat(certsSearch3.Cast<X509Certificate2>())
             .DistinctBy(c => c.Thumbprint)
             .ToArray();
-        return new X509Certificate2Collection(allCerts);
+        return allCerts;
     }
 
     private static X509Certificate2Collection FindBySubjectDistinguishedName(
