@@ -173,9 +173,10 @@ public static class CertUtils
         }
         catch
         {
+            string commonName = cert.GetNameInfo(X509NameType.SimpleName, true);
             return string.Equals(
-                cert.Issuer,
-                issuerName.Trim(),
+                commonName,
+                issuerName.Replace("CN=", "").Trim(),
                 StringComparison.OrdinalIgnoreCase
             );
         }
