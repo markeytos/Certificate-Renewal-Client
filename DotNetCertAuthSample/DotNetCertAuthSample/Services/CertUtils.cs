@@ -173,14 +173,14 @@ public static class CertUtils
         }
         catch
         {
-            X509Name certIssuerDN = new(cert.Issuer);
-            List<string> commonName = certIssuerDN.GetValueList(X509Name.CN).ToList();
-            if (commonName.Count == 0)
-            {
-                return false;
-            }
+            string? commonName = cert
+                .IssuerName.EnumerateRelativeDistinguishedNames()
+                .FirstOrDefault(rdn =>
+                    rdn.GetSingleElementType() == Oid.FromFriendlyName("CN", OidGroup.All)
+                )
+                ?.GetSingleElementValue();
             return string.Equals(
-                commonName[0].ToString(),
+                commonName,
                 issuerName.Replace("CN=", "").Trim(),
                 StringComparison.OrdinalIgnoreCase
             );
