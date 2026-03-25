@@ -18,7 +18,7 @@ public class CertificateManagerTests
             IStoreService storeService = new UnifiedStoreService();
             ICertStoreService certStoreService = new WindowsCertService(storeService);
             ISystemInfoService systemInfoService = new WindowsSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService);
+            return new CertificateManager(certStoreService, systemInfoService, new SettingsService());
 #else
             throw new Exception("Windows-specific services not available in this build.");
 #endif
@@ -29,7 +29,7 @@ public class CertificateManagerTests
             IStoreService storeService = new LinuxStoreService();
             ICertStoreService certStoreService = new UnifiedCertStoreService(storeService);
             ISystemInfoService systemInfoService = new UnifiedSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService);
+            return new CertificateManager(certStoreService, systemInfoService,new SettingsService());
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -37,7 +37,7 @@ public class CertificateManagerTests
             IStoreService storeService = new UnifiedStoreService();
             ICertStoreService certStoreService = new UnifiedCertStoreService(storeService);
             ISystemInfoService systemInfoService = new UnifiedSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService);
+            return new CertificateManager(certStoreService, systemInfoService, new SettingsService());
         }
 
         throw new Exception("Unsupported operating system for tests.");

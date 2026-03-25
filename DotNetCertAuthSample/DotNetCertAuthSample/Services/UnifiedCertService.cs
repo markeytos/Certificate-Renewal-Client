@@ -81,7 +81,25 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
 
     public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(caSki))
+            throw new ArgumentException("CA SKI cannot be null or empty.", nameof(caSki));
+
+        string normalizedTargetSki = CertUtils.NormalizeHex(caSki);
+
+        using X509Store store = CertUtils.GetCertStore(localStore);
+        store.Open(OpenFlags.ReadOnly);
+
+        List<X509Certificate2> certificates = store
+            .Certificates.Cast<X509Certificate2>()
+            .Where(cert =>
+            {
+                string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
+                return !string.IsNullOrWhiteSpace(authorityKeyId)
+                       && CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
+            })
+            .ToList();
+        store.Close();
+        return certificates;
     }
 
     public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters key)

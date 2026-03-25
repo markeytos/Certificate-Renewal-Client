@@ -141,30 +141,37 @@ public static class CertUtils
     public static string GetAuthorityKeyIdentifier(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
-        X509Extension? extension = cert.Extensions["2.5.29.35"];
-        if (extension is null || extension.RawData.Length == 0)
+        try
         {
-            return string.Empty;
+            X509Extension? extension = cert.Extensions["2.5.29.35"];
+            if (extension is null || extension.RawData.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            AsnReader reader = new(extension.RawData, AsnEncodingRules.DER);
+            AsnReader sequence = reader.ReadSequence();
+            Asn1Tag tag = sequence.PeekTag();
+
+            // AuthorityKeyIdentifier ::= SEQUENCE {
+            //   keyIdentifier             [0] KeyIdentifier           OPTIONAL,
+            //   authorityCertIssuer       [1] GeneralNames            OPTIONAL,
+            //   authorityCertSerialNumber [2] CertificateSerialNumber OPTIONAL
+            // }
+            //
+            // We want [0], which is the keyIdentifier.
+            if (tag is { TagClass: TagClass.ContextSpecific, TagValue: 0 })
+            {
+                byte[] keyIdentifier = sequence.ReadOctetString(
+                    new Asn1Tag(TagClass.ContextSpecific, 0)
+                );
+                return Convert.ToHexString(keyIdentifier).ToLowerInvariant();
+            }
         }
-
-        AsnReader reader = new(extension.RawData, AsnEncodingRules.DER);
-        AsnReader sequence = reader.ReadSequence();
-        Asn1Tag tag = sequence.PeekTag();
-
-        // AuthorityKeyIdentifier ::= SEQUENCE {
-        //   keyIdentifier             [0] KeyIdentifier           OPTIONAL,
-        //   authorityCertIssuer       [1] GeneralNames            OPTIONAL,
-        //   authorityCertSerialNumber [2] CertificateSerialNumber OPTIONAL
-        // }
-        //
-        // We want [0], which is the keyIdentifier.
-        if (tag is { TagClass: TagClass.ContextSpecific, TagValue: 0 })
+        catch 
         {
-            byte[] keyIdentifier = sequence.ReadOctetString(
-                new Asn1Tag(TagClass.ContextSpecific, 0)
-            );
-            return Convert.ToHexString(keyIdentifier).ToLowerInvariant();
         }
+       
         return string.Empty;
     }
 

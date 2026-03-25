@@ -237,7 +237,7 @@ public class CertificateManager(
             LogInformation(
                 $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
             );
-            LogInformation($"Creating CSR for certificate");
+            LogInformation("Creating CSR for certificate");
             bool makePrivateKeyExportable = false;
             // Extract key usages from the existing certificate
             string csr = certStoreService.CreateCSR(
@@ -825,7 +825,7 @@ public class CertificateManager(
             }
         }
 
-        if (values.EKUs == null || values.EKUs.Count == 0)
+        if (values.EKUs.Count == 0)
         {
             values.EKUs = EZCAConstants.DomainControllerDefaultEKUs;
         }

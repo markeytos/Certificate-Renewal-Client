@@ -26,7 +26,7 @@ public class Program
             return 1;
 #endif
         }
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             storeService = new LinuxStoreService();
             certStoreService = new UnifiedCertStoreService(storeService);
