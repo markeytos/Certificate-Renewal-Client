@@ -952,14 +952,27 @@ public class CertificateManager(
             PkcsObjectIdentifiers.Pkcs9AtExtensionRequest,
             new DerSet(extensions.Generate())
         );
+        X509Name subjectName = ParseX509Name(values.SubjectName!);
         Pkcs10CertificationRequest request = new(
             "SHA256WITHRSA",
-            new X509Name(values.SubjectName),
+            subjectName,
             rsaKeyPair.Public,
             new DerSet(extensionRequest, scepPassword),
             rsaKeyPair.Private
         );
         return request;
+    }
+
+    private X509Name ParseX509Name(string subjectName)
+    {
+        try
+        {
+            return new X509Name(subjectName);
+        }
+        catch
+        {
+            return new X509Name($"CN={subjectName}");
+        }
     }
 
     private static AsymmetricCipherKeyPair CreateKeyPair(string keyAlgo)
