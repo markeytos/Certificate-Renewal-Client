@@ -2,11 +2,11 @@
 
 At Keytos, our goal is to make EZCA, our [cloud PKI service](https://www.keytos.io/azure-pki), easy-to-use for every person in the world. One way to make this a reality is by removing humans as much as possible from the equation. To help companies achieve this goal, we have created a sample C# console application for Windows and Linux that can:
 
-- [Register a new domain in EZCA](#register-a-new-domain-in-ezca)
-- [Create a new certificate](#create-a-new-certificate)
-- [Renew an existing certificate](#renew-an-existing-certificate)
-- [Create a Domain Controller Certificate](#create-a-domain-controller-certificate)
-- [Create SCEP Certificates for Unmanaged Devices](#create-scep-certificates-for-unmanaged-devices)
+- [Register a new domain in EZCA](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#register-a-new-domain-in-ezca)
+- [Create a new certificate](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#create-a-new-certificate)
+- [Renew an existing certificate](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#renew-an-existing-certificate)
+- [Create a Domain Controller Certificate](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#create-a-domain-controller-certificate)
+- [Create SCEP Certificates for Unmanaged Devices](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#create-scep-certificates-for-non-managed-windows-devices)
 
 This application can be used in combination with Windows Task Scheduler or Linux cron jobs to automatically renew certificates before they expire, ensuring that your systems remain secure and compliant without manual intervention.
 
