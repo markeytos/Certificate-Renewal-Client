@@ -81,5 +81,5 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 
 ## Documentation
 
-To learn more about how to use this application, please refer to the [official documentation](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/).
+Please refer to the [official documentation](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#how-to-manage-your-ezca-resources-with-the-ezca-certificate-renewal-client).
 
