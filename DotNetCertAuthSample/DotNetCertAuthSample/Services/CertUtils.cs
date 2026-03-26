@@ -42,8 +42,8 @@ public static class CertUtils
     public static int GetPercentageOfLifetimeLeft(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
-        double totalLifetime = (int)(cert.NotAfter - cert.NotBefore).TotalDays;
-        double remainingLifetime = (int)(cert.NotAfter - DateTime.UtcNow).TotalDays;
+        double totalLifetime = (cert.NotAfter - cert.NotBefore).TotalDays;
+        double remainingLifetime = (cert.NotAfter - DateTime.UtcNow).TotalDays;
         if (totalLifetime <= 0)
         {
             return 0;
