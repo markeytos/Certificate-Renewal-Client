@@ -182,7 +182,7 @@ public class CertificateManager(
                 LogInformation(
                     $"Analyzing certificate for {cert.Subject} with thumbprint  {cert.Thumbprint}"
                 );
-                if (CertUtils.GetPercentageOfLifetimeLeft(cert) < values.RenewalPercentage)
+                if (CertUtils.GetPercentageOfLifetimeLeft(cert) <= values.RenewalPercentage)
                 {
                     if (
                         settings.RotatedCertificates.Any(x =>
