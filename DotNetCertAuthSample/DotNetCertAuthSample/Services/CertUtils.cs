@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Asn1.X509;
 
 namespace DotNetCertAuthSample.Services;
 
@@ -49,7 +50,7 @@ public static class CertUtils
             cert ??=
                 certs
                     .OrderByDescending(x => x.NotAfter)
-                    .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                    .FirstOrDefault(i => MatchesSubjectDistinguishedName(i, subjectName))
                 ?? certs.OrderByDescending(x => x.NotAfter).First();
         }
         else
@@ -81,7 +82,7 @@ public static class CertUtils
                 cert =
                     matchingCertificates
                         .OrderByDescending(x => x.NotAfter)
-                        .FirstOrDefault(i => i.SubjectName.Name == $"CN={subjectName}")
+                        .FirstOrDefault(i => MatchesSubjectDistinguishedName(i, subjectName))
                     ?? matchingCertificates.OrderByDescending(x => x.NotAfter).First();
             }
         }
@@ -133,5 +134,51 @@ public static class CertUtils
             }
         }
         return null;
+    }
+
+    public static bool MatchesSubjectDistinguishedName(X509Certificate2 cert, string subjectName)
+    {
+        try
+        {
+            X509Name certSubjectDN = new(cert.Subject);
+            X509Name inputSubjectDN = new(subjectName);
+            if (!certSubjectDN.Equivalent(inputSubjectDN))
+            {
+                throw new Exception();
+            }
+            return true;
+        }
+        catch
+        {
+            string commonName = cert.GetNameInfo(X509NameType.SimpleName, false);
+            return string.Equals(
+                commonName,
+                subjectName.Replace("CN=", "").Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+    }
+
+    public static bool MatchesIssuerDistinguishedName(X509Certificate2 cert, string issuerName)
+    {
+        try
+        {
+            X509Name certIssuerDN = new(cert.Issuer);
+            X509Name inputIssuerDN = new(issuerName);
+            if (!certIssuerDN.Equivalent(inputIssuerDN))
+            {
+                throw new Exception();
+            }
+            return true;
+        }
+        catch
+        {
+            string commonName = cert.GetNameInfo(X509NameType.SimpleName, true);
+            return string.Equals(
+                commonName,
+                issuerName.Replace("CN=", "").Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
     }
 }
