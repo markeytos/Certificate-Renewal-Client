@@ -598,7 +598,7 @@ public class CertificateManagerTests
     public async Task Create_User_Certificate_UserStore_KeyLength()
     {
         CertificateManager manager = CreateManager();
-        string domainUser = $"{NewDomain()}_KeyLength2048";
+        string domainUser = $"{NewDomain()}-KeyLength2048";
 
         GenerateArgModel createUserArgs = new()
         {
@@ -620,7 +620,7 @@ public class CertificateManagerTests
     public async Task Create_User_Certificate_UserStore_SoftwareKeyProvider()
     {
         CertificateManager manager = CreateManager();
-        string domainUser = $"{NewDomain()}_SoftwareKeyProvider";
+        string domainUser = $"{NewDomain()}-SoftwareKeyProvider";
 
         GenerateArgModel createUserArgs = new()
         {
@@ -642,7 +642,7 @@ public class CertificateManagerTests
     public async Task Create_User_Certificate_UserStore_CryptoKeyProvider()
     {
         CertificateManager manager = CreateManager();
-        string domainUser = $"{NewDomain()}_CryptoKeyProvider";
+        string domainUser = $"{NewDomain()}-CryptoKeyProvider";
 
         GenerateArgModel createUserArgs = new()
         {
@@ -664,7 +664,7 @@ public class CertificateManagerTests
     public async Task Create_User_Certificate_LocalStore_RDP()
     {
         CertificateManager manager = CreateManager();
-        string domainUser = $"{NewDomain()}_RDP";
+        string domainUser = $"{NewDomain()}-RDP";
 
         GenerateArgModel createUserArgs = new()
         {
