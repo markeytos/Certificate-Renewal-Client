@@ -138,6 +138,34 @@ public static class CertUtils
         return new X509Store(localStore ? StoreLocation.LocalMachine : StoreLocation.CurrentUser);
     }
 
+    public static List<X509Certificate2> GetCACertificates(string caSki, bool localStore)
+    {
+        if (string.IsNullOrWhiteSpace(caSki))
+        {
+            throw new ArgumentException("CA SKI cannot be null or empty.", nameof(caSki));
+        }
+        string normalizedTargetSki = NormalizeHex(caSki);
+
+        using X509Store store = GetCertStore(localStore);
+        store.Open(OpenFlags.ReadOnly);
+
+        List<X509Certificate2> certificates = store
+            .Certificates.Cast<X509Certificate2>()
+            .Where(cert =>
+            {
+                string authorityKeyId = GetAuthorityKeyIdentifier(cert);
+                return !string.IsNullOrWhiteSpace(authorityKeyId)
+                       && NormalizeHex(authorityKeyId) == normalizedTargetSki;
+            })
+            .ToList();
+        List<X509Certificate2> expiredCertificates = certificates.Where(x=> x.NotAfter < DateTime.UtcNow.AddMonths(1)).ToList();
+        foreach (X509Certificate2 expiredCertificate in expiredCertificates)
+        {
+            store.Remove(expiredCertificate);
+        }
+        store.Close();
+        return certificates;
+    }
     public static string GetAuthorityKeyIdentifier(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);

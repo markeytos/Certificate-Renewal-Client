@@ -167,7 +167,7 @@ public class CertificateManager(
             foreach (string ski in values.authoritySubjectKeys.Split(','))
             {
                 certs.AddRange(
-                    certStoreService.GetUserCertificatesIssuedByCaSki(ski, values.LocalCertStore)
+                    certStoreService.GetCertificatesIssuedByCaSki(ski, values.LocalCertStore)
                 );
             }
             if (certs.Count == 0)
@@ -186,7 +186,7 @@ public class CertificateManager(
                 {
                     if (
                         settings.RotatedCertificates.Any(x =>
-                            x.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)
+                            x.Thumbprint.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)
                         )
                     )
                     {
@@ -198,7 +198,7 @@ public class CertificateManager(
                     }
                     else
                     {
-                        result += await ReneCertificatesAsync(cert, values, settings);
+                        result += await RenewCertificatesAsync(cert, values, settings);
                     }
                 }
                 else
@@ -217,7 +217,7 @@ public class CertificateManager(
         return result;
     }
 
-    private async Task<int> ReneCertificatesAsync(
+    private async Task<int> RenewCertificatesAsync(
         X509Certificate2 cert,
         RenewAllArgModel values,
         SettingsModel settings
@@ -254,7 +254,7 @@ public class CertificateManager(
                 makePrivateKeyExportable
             );
             LogInformation("Renewing certificate");
-            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
+            EZCAClientClass ezcaClient = new(_httpClient, _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
             X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
                 createdCert
@@ -269,7 +269,7 @@ public class CertificateManager(
                     cert.Thumbprint,
                     certReturned.Thumbprint
                 );
-                if (rdpResult.Success && string.IsNullOrWhiteSpace(rdpResult.Message))
+                if (rdpResult.Success && !string.IsNullOrWhiteSpace(rdpResult.Message))
                 {
                     LogInformation(rdpResult.Message);
                 }
@@ -278,7 +278,7 @@ public class CertificateManager(
                     LogError(new(rdpResult.Message));
                 }
             }
-            settings.RotatedCertificates.Add(certReturned.Thumbprint);
+            settings.RotatedCertificates.Add(new(cert.Thumbprint, cert.NotAfter));
             settingsService.SaveSettings(settings, _logger);
         }
         catch (Exception ex)
@@ -349,7 +349,7 @@ public class CertificateManager(
                 makePrivateKeyExportable
             );
             LogInformation($"Renewing certificate");
-            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
+            EZCAClientClass ezcaClient = new(_httpClient, _logger, values.url);
             string createdCert = await ezcaClient.RenewCertificateAsync(cert, csr);
             X509Certificate2 certReturned = CryptoStaticService.ImportCertFromPEMString(
                 createdCert
@@ -600,7 +600,7 @@ public class CertificateManager(
         {
             ValidateGenerateArgModel(values);
             IEZCAClient ezcaClient = new EZCAClientClass(
-                new HttpClient(),
+                _httpClient,
                 _logger,
                 values.url,
                 CreateTokenCredential(values.ClientID, values.ClientSecret, values.TenantID)
@@ -738,7 +738,7 @@ public class CertificateManager(
             AssertLocalStoreProperties(localStore);
             ValidateCreateDCCertificateModel(values);
             IEZCAClient ezcaClient = new EZCAClientClass(
-                new HttpClient(),
+                _httpClient,
                 _logger,
                 values.url,
                 CreateTokenCredential(values.AzureCLI)
@@ -1259,7 +1259,7 @@ public class CertificateManager(
         try
         {
             ValidateRegisterArgModel(values);
-            EZCAClientClass ezcaClient = new(new HttpClient(), _logger, values.url);
+            EZCAClientClass ezcaClient = new(_httpClient, _logger, values.url);
             LogInformation("Getting available CAs");
             AvailableCAModel selectedCA = await GetCAAsync(values.caID, ezcaClient);
             LogInformation($"Registering domain: {values.Domain}");

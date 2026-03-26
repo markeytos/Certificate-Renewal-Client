@@ -22,9 +22,8 @@ public class SettingsService : ISettingsService
         SettingsModel result;
         if (string.IsNullOrWhiteSpace(settingsString))
         {
-            result = new SettingsModel();
-            settingsString = JsonSerializer.Serialize(result);
-            WriteToFile(path, settingsString, logger, settingsFolder);
+            result = new ();
+            SaveSettings(result, logger);
         }
         else
         {
@@ -37,7 +36,8 @@ public class SettingsService : ISettingsService
     {
         string settingsFolder = "certClient";
         string path = CreateFilePath("certClientSettings.json", settingsFolder);
-
+        settings.RotatedCertificates = settings.RotatedCertificates.Where(rc => rc.ExpiryDate 
+            > DateTime.UtcNow.AddDays(7)).ToList();
         string settingsString = JsonSerializer.Serialize(settings);
         WriteToFile(path, settingsString, logger, settingsFolder);
     }
@@ -65,10 +65,6 @@ public class SettingsService : ISettingsService
     private static string GetFullFile(string filepath, ILogger? logger, bool suppressError = false)
     {
         string content = string.Empty;
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            filepath = filepath.Replace("\\", "/");
-        }
         try
         {
             content = File.ReadAllText(filepath, Encoding.UTF8);
@@ -85,44 +81,45 @@ public class SettingsService : ISettingsService
 
     private static string CreateFilePath(string fileName, string folder)
     {
-        string path;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (string.IsNullOrWhiteSpace(fileName))
         {
-            if (fileName.Contains("\\"))
-            {
-                return fileName;
-            }
-            path =
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                + "\\"
-                + folder;
-            Directory.CreateDirectory(path);
-            if (!string.IsNullOrWhiteSpace(fileName))
-            {
-                path = path + "\\" + fileName;
-            }
+            throw new ArgumentException("fileName cannot be null or empty", nameof(fileName));
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+
+        // If it's already an absolute path, just return it
+        if (Path.IsPathRooted(fileName))
         {
-            if (fileName.Contains("/"))
-            {
-                return fileName;
-            }
-            path =
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-                + "/Library/"
-                + folder;
-            Directory.CreateDirectory(path);
-            path = path + "/" + fileName;
+            return fileName;
+        }
+
+        string basePath;
+
+        if (OperatingSystem.IsWindows())
+        {
+            basePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                folder
+            );
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            basePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Library",
+                folder
+            );
         }
         else
         {
-            if (fileName.Contains("/"))
-            {
-                return fileName;
-            }
-            path = Directory.GetCurrentDirectory() + fileName;
+            // Linux / others
+            basePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                folder
+            );
         }
-        return path;
+
+        Directory.CreateDirectory(basePath);
+
+        return Path.Combine(basePath, fileName);
     }
 }

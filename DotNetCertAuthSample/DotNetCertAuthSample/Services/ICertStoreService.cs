@@ -35,7 +35,7 @@ public interface ICertStoreService
         string? password = null
     );
 
-    List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore);
+    List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore);
 
     X509Certificate2 AddPrivateKeyToCertificate(X509Certificate2 certificate, bool localStore);
 }

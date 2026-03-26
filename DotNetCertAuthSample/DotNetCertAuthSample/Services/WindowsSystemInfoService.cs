@@ -86,7 +86,7 @@ public class WindowsSystemInfoService : ISystemInfoService
         string currentThumbprint = NormalizeThumbprint(
             instance.CimInstanceProperties[thumbprintProperty].Value?.ToString()
         );
-        if (currentThumbprint != oldCertThumbprint)
+        if (currentThumbprint != NormalizeThumbprint(oldCertThumbprint))
         {
             return new(true, "");
         }

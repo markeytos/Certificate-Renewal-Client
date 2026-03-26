@@ -82,27 +82,9 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
 
-    public List<X509Certificate2> GetUserCertificatesIssuedByCaSki(string caSki, bool localStore)
+    public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        if (string.IsNullOrWhiteSpace(caSki))
-            throw new ArgumentException("CA SKI cannot be null or empty.", nameof(caSki));
-
-        string normalizedTargetSki = CertUtils.NormalizeHex(caSki);
-
-        using X509Store store = CertUtils.GetCertStore(localStore);
-        store.Open(OpenFlags.ReadOnly);
-
-        List<X509Certificate2> certificates = store
-            .Certificates.Cast<X509Certificate2>()
-            .Where(cert =>
-            {
-                string authorityKeyId = CertUtils.GetAuthorityKeyIdentifier(cert);
-                return !string.IsNullOrWhiteSpace(authorityKeyId)
-                    && CertUtils.NormalizeHex(authorityKeyId) == normalizedTargetSki;
-            })
-            .ToList();
-        store.Close();
-        return certificates;
+        return  CertUtils.GetCACertificates(caSki, localStore);
     }
 
     public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)

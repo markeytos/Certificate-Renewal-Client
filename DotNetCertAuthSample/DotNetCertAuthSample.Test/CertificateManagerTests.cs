@@ -228,7 +228,62 @@ public class CertificateManagerTests
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
     }
+    
+    [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Renew_All_User_Certificate_UserStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
 
+        GenerateArgModel createUserArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(createUserArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewAllArgModel renewUserArgs = new()
+        {
+            authoritySubjectKeys = TestConfig.CASubjectKeyIdentifier,
+            LocalCertStore = false
+        };
+        manager.InitializeManager(renewUserArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
+    [Fact]
+    [Trait("Privilege", "Root")]
+    public async Task Renew_Machine_All_Certificates_LocalStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainMachine = NewDomain();
+
+        GenerateArgModel createMachineArgs = new()
+        {
+            Domain = domainMachine,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = true,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(createMachineArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+        RenewAllArgModel renewMachineArgs = new()
+        {
+            authoritySubjectKeys = TestConfig.CASubjectKeyIdentifier,
+            LocalCertStore = true,
+        };
+        manager.InitializeManager(renewMachineArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+    }
     [Fact]
     [Trait("Privilege", "User")]
     public async Task Renew_User_Certificate_UserStore_CN()
