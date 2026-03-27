@@ -84,7 +84,7 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 Please refer to the [Keytos documentation](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#how-to-manage-your-ezca-resources-with-the-ezca-certificate-renewal-client) for instructions on how to use the tool and example commands!
 
 ## Development 
-If you want to contribute or customize the application, you can clone the repository and build it using .NET 10 SDK. Make sure to have the necessary dependencies installed and follow the coKeytos code best practices for contributions. 
+If you want to contribute or customize the application, you can clone the repository and build it using .NET 10 SDK. Make sure to have the necessary dependencies installed and follow the Keytos code best practices for contributions. 
 
 ### Testing 
 We have included unit tests for the core functionalities of the application. To run the tests, use the following command in the project directory
