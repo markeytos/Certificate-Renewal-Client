@@ -83,3 +83,33 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 
 Please refer to the [Keytos documentation](https://www.keytos.io/docs/azure-pki/pki-tooling/ezca-cert-renewal-client/#how-to-manage-your-ezca-resources-with-the-ezca-certificate-renewal-client) for instructions on how to use the tool and example commands!
 
+## Development 
+If you want to contribute or customize the application, you can clone the repository and build it using .NET 10 SDK. Make sure to have the necessary dependencies installed and follow the Keytos code best practices for contributions. 
+
+### Testing 
+We have included unit tests for the core functionalities of the application. To run the tests, use the following command in the project directory
+#### Windows 
+First you have to add the environment variables for your tests (Fill in the values for your environment, if you are a Keytos Engineer ask Grayson or Igal for the internal values):
+```powershell
+$env:EZCA_SSL_CA_ID=""
+$env:EZCA_SSL_CA_ISSUER=""
+$env:TEMPLATE_NAME=""
+$env:EZCA_SCEP_CA_ID=""
+$env:EZCA_SCEP_TEMPLATE_ID=""
+$env:EZCA_SCEP_URL=""
+$env:EZCA_SCEP_PASSWORD=""
+$env:APP_INSIGHTS_INSTRUMENTATION_KEY=""
+$env:CA_SUBJECT_KEY_IDENTIFIER=""
+```
+For windows, since we have certenroll and other windows specific dependencies, we must build it using the msbuild command instead of dotnet build, to ensure the correct target framework is used. 
+```powershell
+MSBuild.exe  .\DotNetCertAuthSample\DotNetCertAuthSample.Test\DotNetCertAuthSample.Test.csproj   /t:Build   /p:Configuration=Debug    /p:TargetFramework=net10.0-windows
+```
+If you can't find the msbuild command, it is probably here: `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe` (path may vary based on your Visual Studio version and edition but this is 2026).
+
+Then you can run the tests using the following command:
+```powershell
+$vsTest = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe"  
+& $vsTest  .\DotNetCertAuthSample\DotNetCertAuthSample.Test\bin\Debug\net10.0-windows\DotNetCertAuthSample.Test.dll
+```
+
