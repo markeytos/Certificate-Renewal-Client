@@ -27,7 +27,7 @@ public interface ICertStoreService
         string? password = null
     );
 
-    public X509Certificate2 GetCertFromStore(
+    X509Certificate2 GetCertFromStore(
         string subjectName,
         bool localStore,
         string issuerName = "",
@@ -35,8 +35,7 @@ public interface ICertStoreService
         string? password = null
     );
 
-    public X509Certificate2 AddPrivateKeyToCertificate(
-        X509Certificate2 certificate,
-        bool localStore
-    );
+    List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore);
+
+    X509Certificate2 AddPrivateKeyToCertificate(X509Certificate2 certificate, bool localStore);
 }

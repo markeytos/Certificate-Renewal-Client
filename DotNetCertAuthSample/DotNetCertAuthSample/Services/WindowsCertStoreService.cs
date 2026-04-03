@@ -1,12 +1,10 @@
 ﻿#if WINDOWS
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
-using Org.BouncyCastle.Asn1;
-using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
-using Org.BouncyCastle.X509;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
 using X509Extension = System.Security.Cryptography.X509Certificates.X509Extension;
 using EZCAClient.Services;
@@ -84,15 +82,9 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
 
-    private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
+    public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        if (keyUsageFlags == null)
-        {
-            return CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
-                | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
-        }
-
-        return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
+        return  CertUtils.GetCACertificates(caSki, localStore);
     }
 
     public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)
@@ -256,6 +248,17 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         }
 
         return flags;
+    }
+
+    private CERTENROLLLib.X509KeyUsageFlags ConvertKeyUsageFlags(X509KeyUsageFlags? keyUsageFlags)
+    {
+        if (keyUsageFlags == null)
+        {
+            return CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_DIGITAL_SIGNATURE_KEY_USAGE
+                | CERTENROLLLib.X509KeyUsageFlags.XCN_CERT_KEY_ENCIPHERMENT_KEY_USAGE;
+        }
+
+        return ConvertKeyUsage((X509KeyUsageFlags)keyUsageFlags);
     }
 }
 #endif

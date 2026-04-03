@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using EZCAClient.Services;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
@@ -80,6 +79,11 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         );
     }
 
+    public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
+    {
+        return  CertUtils.GetCACertificates(caSki, localStore);
+    }
+
     public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters key)
     {
         RSAParameters rsaParams = new()
@@ -128,15 +132,25 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         return csrPemBuilder.ToString();
     }
 
-    private static AsymmetricCipherKeyPair GenerateKeyPair(int keylength)
+    private static AsymmetricCipherKeyPair GenerateKeyPair(int keyLength)
     {
         CryptoApiRandomGenerator randomGenerator = new();
         SecureRandom random = new(randomGenerator);
-        KeyGenerationParameters keyGenerationParameters = new(random, keylength);
-        RsaKeyPairGenerator keyPairGenerator = new();
-        keyPairGenerator.Init(keyGenerationParameters);
-        AsymmetricCipherKeyPair keyPair = keyPairGenerator.GenerateKeyPair();
-        return keyPair;
+        KeyGenerationParameters keyGenerationParameters = new(random, keyLength);
+        if (keyLength >= 2048)
+        {
+            RsaKeyPairGenerator keyPairGenerator = new();
+            keyPairGenerator.Init(keyGenerationParameters);
+            AsymmetricCipherKeyPair keyPair = keyPairGenerator.GenerateKeyPair();
+            return keyPair;
+        }
+        else
+        {
+            ECKeyPairGenerator ecKeyPairGenerator = new();
+            ecKeyPairGenerator.Init(keyGenerationParameters);
+            AsymmetricCipherKeyPair keyPair = ecKeyPairGenerator.GenerateKeyPair();
+            return keyPair;
+        }
     }
 
     private static X509KeyUsage ConvertDotnetKeyUsagesToBouncy(X509KeyUsageFlags? keyUsage)
