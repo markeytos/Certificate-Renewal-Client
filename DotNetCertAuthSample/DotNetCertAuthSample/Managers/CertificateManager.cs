@@ -273,7 +273,7 @@ public class CertificateManager(
                 {
                     LogInformation(rdpResult.Message);
                 }
-                else
+                else if(!rdpResult.Success)
                 {
                     LogError(new(rdpResult.Message));
                 }

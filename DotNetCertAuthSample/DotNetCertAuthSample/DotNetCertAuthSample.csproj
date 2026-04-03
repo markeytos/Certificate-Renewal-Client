@@ -1,9 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks Condition="$([MSBuild]::IsOsPlatform('Windows'))"
-      >net10.0;net10.0-windows</TargetFrameworks
-    >
+    <TargetFrameworks Condition="$([MSBuild]::IsOsPlatform('Windows'))">net10.0;net10.0-windows</TargetFrameworks>
     <TargetFrameworks Condition="!$([MSBuild]::IsOsPlatform('Windows'))">net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -30,18 +28,18 @@
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
-    <PackageReference Include="EZCAClient" Version="1.0.7" />
-    <PackageReference Include="jose-jwt" Version="5.2.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+    <PackageReference Include="EZCAClient" Version="1.0.9" />
+    <PackageReference Include="jose-jwt" Version="5.3.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.23.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="8.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="10.0.5" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <PackageReference Include="Microsoft.Management.Infrastructure" Version="3.0.0" />
-    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="10.0.2" />
+    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="10.0.5" />
   </ItemGroup>
 </Project>

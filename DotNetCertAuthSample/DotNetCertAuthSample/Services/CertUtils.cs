@@ -147,7 +147,7 @@ public static class CertUtils
         string normalizedTargetSki = NormalizeHex(caSki);
 
         using X509Store store = GetCertStore(localStore);
-        store.Open(OpenFlags.ReadOnly);
+        store.Open(OpenFlags.ReadWrite);
 
         List<X509Certificate2> certificates = store
             .Certificates.Cast<X509Certificate2>()
@@ -158,7 +158,7 @@ public static class CertUtils
                        && NormalizeHex(authorityKeyId) == normalizedTargetSki;
             })
             .ToList();
-        List<X509Certificate2> expiredCertificates = certificates.Where(x=> x.NotAfter < DateTime.UtcNow.AddMonths(1)).ToList();
+        List<X509Certificate2> expiredCertificates = certificates.Where(x=> x.NotAfter < DateTime.UtcNow.AddMonths(-1)).ToList();
         foreach (X509Certificate2 expiredCertificate in expiredCertificates)
         {
             store.Remove(expiredCertificate);
