@@ -19,6 +19,7 @@ internal static class TestConfig
     public static string? CertPassword => GetOptional("CERT_PASSWORD");
 
     public static string? AppInsights => GetOptional("APP_INSIGHTS_INSTRUMENTATION_KEY");
+    public static string CASubjectKeyIdentifier => GetRequired("CA_SUBJECT_KEY_IDENTIFIER");
 
     private static string GetRequired(string name)
     {

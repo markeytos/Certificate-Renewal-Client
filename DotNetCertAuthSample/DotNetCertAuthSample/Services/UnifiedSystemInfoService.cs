@@ -1,3 +1,5 @@
+using EZCAClient.Models;
+
 namespace DotNetCertAuthSample.Services;
 
 public class UnifiedSystemInfoService : ISystemInfoService
@@ -8,6 +10,11 @@ public class UnifiedSystemInfoService : ISystemInfoService
     }
 
     public void SetRDPCertificate(string thumbprint)
+    {
+        throw new NotSupportedException("RDP is only available on Windows");
+    }
+
+    public APIResultModel CheckIfRDPCertAndRenew(string oldCertThumbprint, string newCertThumbprint)
     {
         throw new NotSupportedException("RDP is only available on Windows");
     }

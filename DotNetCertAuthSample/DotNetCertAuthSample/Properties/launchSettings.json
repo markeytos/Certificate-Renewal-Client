@@ -8,6 +8,10 @@
       "commandName": "Project",
       "commandLineArgs": " renew -s \"CN=server3.contoso.com-tpm\" -i \"SCEP Any Root  Extras\" --LocalStore --EZCAInstance https://localhost:5001/ -k 2048"
     },
+    "TestRenewAll": {
+      "commandName": "Project",
+      "commandLineArgs": " renewAll -a \"88248ab14399ec8476a493fbcfe36fbf36254afb\"  --EZCAInstance https://localhost:5001/ "
+    },
     "TestSCEP": {
       "commandName": "Project",
       "commandLineArgs": "SCEPCertificate  -u https://localhost:5001/api/SCEP/Static/1c3c6cea-fcbd-4681-85e1-74fb74b6863e/077cfd01-82ee-40bd-b709-f0f9b9d8f996/eastus/cgi-bin --EKUs 1.3.6.1.5.5.7.3.2 -s \"CN=server8.contoso.com\" -p AEF5F5C0CF0C7168  --SubjectAltNames igal "
