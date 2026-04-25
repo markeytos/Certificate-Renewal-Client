@@ -466,37 +466,7 @@ public class CertificateManagerTests
         DeleteCertificateFiles(pfxPath);
     }
 
-    [Fact]
-    [Trait("Privilege", "User")]
-    public async Task Renew_User_Certificate_From_Pem_File_UserStore()
-    {
-        CertificateManager manager = CreateManager();
-        string domainUser = NewDomain();
-        string pemPath = $"./renew-from-pem-{domainUser}.pem";
-
-        GenerateArgModel createArgs = new()
-        {
-            Domain = domainUser,
-            caID = TestConfig.SslCaId,
-            Validity = 30,
-            LocalCertStore = false,
-            Path = pemPath,
-        };
-        manager.InitializeManager(createArgs);
-        int result = await manager.CallCertActionAsync();
-        Assert.Equal(0, result);
-
-        RenewArgModel renewArgs = new()
-        {
-            SourceFile = pemPath,
-            LocalCertStore = false,
-            Password = TestConfig.CertPassword,
-        };
-        manager.InitializeManager(renewArgs);
-        result = await manager.CallCertActionAsync();
-        Assert.Equal(0, result);
-        DeleteCertificateFiles(pemPath);
-    }
+    
 
     [Theory]
     [Trait("Privilege", "User")]

@@ -18,7 +18,8 @@ env.ps1
 
 # Mono auto generated files
 mono_crash.*
-
+#claude
+.claude/
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
