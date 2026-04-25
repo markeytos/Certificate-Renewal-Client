@@ -487,10 +487,14 @@ public class CertificateManager(
             byte[] certBytes;
             if (includePrivateKey)
             {
+                bool passwordWasProvided = !string.IsNullOrWhiteSpace(password);
                 password = CertUtils.GetOrGeneratePasswordForCert(password);
                 certBytes = certToExport.Export(X509ContentType.Pfx, password);
-                await File.WriteAllTextAsync(passwordPath, password);
-                LogInformation($"Certificate private key password saved to {passwordPath}");
+                if (!passwordWasProvided)
+                {
+                    await File.WriteAllTextAsync(passwordPath, password);
+                    LogInformation($"Certificate private key password saved to {passwordPath}");
+                }
             }
             else
             {
@@ -516,7 +520,7 @@ public class CertificateManager(
         }
 
         string? directory = Path.GetDirectoryName(path);
-        if (directory != null && !Directory.Exists(directory))
+        if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }
