@@ -407,6 +407,141 @@ public class CertificateManagerTests
     }
 
     [Fact]
+    public async Task Renew_Without_Domain_Or_SourceFile_Returns_Error()
+    {
+        CertificateManager manager = CreateManager();
+
+        RenewArgModel renewArgs = new() { LocalCertStore = false };
+        manager.InitializeManager(renewArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task Renew_With_Nonexistent_SourceFile_Returns_Error()
+    {
+        CertificateManager manager = CreateManager();
+
+        RenewArgModel renewArgs = new()
+        {
+            SourceFile = "./nonexistent-certificate.pfx",
+            LocalCertStore = false,
+        };
+        manager.InitializeManager(renewArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Renew_User_Certificate_From_Pfx_File_UserStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+        string password = GetRandomPassword();
+        string pfxPath = $"./renew-from-pfx-{domainUser}.pfx";
+
+        GenerateArgModel createArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Path = pfxPath,
+            Password = password,
+        };
+        manager.InitializeManager(createArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewArgs = new()
+        {
+            SourceFile = pfxPath,
+            LocalCertStore = false,
+            Password = password,
+        };
+        manager.InitializeManager(renewArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+        DeleteCertificateFiles(pfxPath);
+    }
+
+    [Fact]
+    [Trait("Privilege", "User")]
+    public async Task Renew_User_Certificate_From_Pem_File_UserStore()
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+        string pemPath = $"./renew-from-pem-{domainUser}.pem";
+
+        GenerateArgModel createArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Path = pemPath,
+        };
+        manager.InitializeManager(createArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewArgs = new()
+        {
+            SourceFile = pemPath,
+            LocalCertStore = false,
+            Password = TestConfig.CertPassword,
+        };
+        manager.InitializeManager(renewArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+        DeleteCertificateFiles(pemPath);
+    }
+
+    [Theory]
+    [Trait("Privilege", "User")]
+    [InlineData("./my-source-cert.pfx", "./my-renewed-cert.pfx", true)]
+    [InlineData("./my-source-cert.pfx", "./my-renewed-cert.pem", false)]
+    [InlineData("./my-source-cert.pfx", "./my-renewed-cert.cer", false)]
+    public async Task Renew_User_Certificate_From_Pfx_File_Save_To_Path(
+        string sourcePath,
+        string outputPath,
+        bool includePrivateKey
+    )
+    {
+        CertificateManager manager = CreateManager();
+        string domainUser = NewDomain();
+        string password = GetRandomPassword();
+
+        GenerateArgModel createArgs = new()
+        {
+            Domain = domainUser,
+            caID = TestConfig.SslCaId,
+            Validity = 30,
+            LocalCertStore = false,
+            Path = sourcePath,
+            Password = password,
+        };
+        manager.InitializeManager(createArgs);
+        int result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+
+        RenewArgModel renewArgs = new()
+        {
+            SourceFile = sourcePath,
+            LocalCertStore = false,
+            Password = password,
+            Path = outputPath,
+        };
+        manager.InitializeManager(renewArgs);
+        result = await manager.CallCertActionAsync();
+        Assert.Equal(0, result);
+        AssertCorrectCertificateFile(outputPath, includePrivateKey, password);
+        DeleteCertificateFiles(sourcePath);
+        DeleteCertificateFiles(outputPath);
+    }
+
+    [Fact]
     [Trait("Privilege", "Root")]
     public async Task Create_DomainController_Certificate_LocalStore()
     {

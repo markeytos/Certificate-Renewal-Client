@@ -17,10 +17,17 @@ public class RenewArgModel
     [Option(
         's',
         "SubjectName",
-        Required = true,
-        HelpText = "SubjectName for the certificate you want to renew"
+        Required = false,
+        HelpText = "SubjectName for the certificate you want to renew. Required unless --SourceFile is provided."
     )]
     public string? Domain { get; set; }
+
+    [Option(
+        "SourceFile",
+        Required = false,
+        HelpText = "Path to an existing certificate file (PEM or PFX/P12) to use as the source for renewal instead of the certificate store. If the file is a PFX, --Password is required to decrypt it."
+    )]
+    public string? SourceFile { get; set; }
 
     [Option(
         "AppInsights",
@@ -80,7 +87,7 @@ public class RenewArgModel
     [Option(
         "Password",
         Required = false,
-        HelpText = "Password for certificate file. For Linux, this must be the password of the existing certificate to be renewed. If not provided, a random password will be generated and saved to {filename}_password.txt in the same directory as the certificate file."
+        HelpText = "Password for the certificate file. Required to decrypt a PFX/P12 source file (--SourceFile). On Linux without --SourceFile, this must be the password of the existing certificate in the store. If not provided when saving a PFX output, a random password will be generated and saved to {filename}_password.txt in the same directory as the certificate file."
     )]
     public string? Password { get; set; }
 }
