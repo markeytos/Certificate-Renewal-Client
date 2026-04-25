@@ -328,7 +328,9 @@ public class CertificateManager(
                 );
             }
 
-            LogInformation($"Renewing certificate for {values.Domain ?? cert.Subject}");
+            LogInformation(
+                $"Renewing certificate for {(string.IsNullOrWhiteSpace(values.Domain) ? cert.Subject : values.Domain)}"
+            );
             X509KeyUsageFlags? keyUsages = null;
             foreach (X509Extension ext in cert.Extensions)
             {
