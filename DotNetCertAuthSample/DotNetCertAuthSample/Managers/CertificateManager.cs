@@ -302,19 +302,34 @@ public class CertificateManager(
 
         try
         {
-            LogInformation($"Renewing certificate for {values.Domain}");
             AssertCorrectRenewArgModel(values);
 
+            X509Certificate2? cert;
+            if (!string.IsNullOrWhiteSpace(values.SourceFile))
+            {
+                LogInformation($"Loading certificate from file {values.SourceFile}");
+                cert = LoadCertFromFile(values.SourceFile, values.Password);
+                if (cert == null)
+                {
+                    return 1;
+                }
+            }
+            else
+            {
+                LogInformation(
+                    $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)}"
+                );
+                cert = certStoreService.GetCertFromStore(
+                    values.Domain!.Trim(),
+                    values.LocalCertStore,
+                    values.issuer,
+                    values.template,
+                    values.Password
+                );
+            }
+
             LogInformation(
-                $"Getting certificate from {CertUtils.StoreString(values.LocalCertStore)}"
-            );
-            string domain = values.Domain!;
-            X509Certificate2 cert = certStoreService.GetCertFromStore(
-                domain.Trim(),
-                values.LocalCertStore,
-                values.issuer,
-                values.template,
-                values.Password
+                $"Renewing certificate for {(string.IsNullOrWhiteSpace(values.Domain) ? cert.Subject : values.Domain)}"
             );
             X509KeyUsageFlags? keyUsages = null;
             foreach (X509Extension ext in cert.Extensions)
@@ -359,7 +374,7 @@ public class CertificateManager(
                 values.LocalCertStore,
                 values.Password
             );
-            LogInformation($"Certificate {values.Domain} was renewed successfully");
+            LogInformation($"Certificate {cert.Subject} was renewed successfully");
             if (values.RDPCert)
             {
                 LogInformation($"Setting RDP certificate");
@@ -427,6 +442,28 @@ public class CertificateManager(
         );
     }
 
+    private X509Certificate2? LoadCertFromFile(string path, string? password)
+    {
+        try
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext is ".pfx" or ".p12")
+            {
+                return X509CertificateLoader.LoadPkcs12FromFile(
+                    path,
+                    password,
+                    X509KeyStorageFlags.Exportable
+                );
+            }
+            return X509Certificate2.CreateFromPemFile(path);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, $"Error loading certificate from file {path}");
+            return null;
+        }
+    }
+
     private static string GetPasswordPathFromCertificatePath(string path)
     {
         return Path.Join(
@@ -487,10 +524,14 @@ public class CertificateManager(
             byte[] certBytes;
             if (includePrivateKey)
             {
+                bool passwordWasProvided = !string.IsNullOrWhiteSpace(password);
                 password = CertUtils.GetOrGeneratePasswordForCert(password);
                 certBytes = certToExport.Export(X509ContentType.Pfx, password);
-                await File.WriteAllTextAsync(passwordPath, password);
-                LogInformation($"Certificate private key password saved to {passwordPath}");
+                if (!passwordWasProvided)
+                {
+                    await File.WriteAllTextAsync(passwordPath, password);
+                    LogInformation($"Certificate private key password saved to {passwordPath}");
+                }
             }
             else
             {
@@ -516,7 +557,7 @@ public class CertificateManager(
         }
 
         string? directory = Path.GetDirectoryName(path);
-        if (directory != null && !Directory.Exists(directory))
+        if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }
@@ -563,9 +604,15 @@ public class CertificateManager(
     {
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
-        if (string.IsNullOrWhiteSpace(values.Domain))
+
+        if (string.IsNullOrWhiteSpace(values.Domain) && string.IsNullOrWhiteSpace(values.SourceFile))
         {
-            throw new ArgumentNullException(nameof(values.Domain));
+            throw new ArgumentException("Either --SubjectName or --SourceFile must be provided.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(values.SourceFile) && !File.Exists(values.SourceFile))
+        {
+            throw new FileNotFoundException($"Source certificate file not found: {values.SourceFile}");
         }
 
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
