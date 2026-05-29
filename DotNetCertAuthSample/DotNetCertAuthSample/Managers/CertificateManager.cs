@@ -948,11 +948,15 @@ public class CertificateManager(
             throw new ArgumentNullException(nameof(values.url));
         }
 
-        // TIP: you can hardcode the password here or use a secure secret manager to avoid having the password in the Script
-        // values.SCEPPassword = "YourPassword";
         if (string.IsNullOrWhiteSpace(values.SCEPPassword))
         {
-            throw new ArgumentNullException(nameof(values.SCEPPassword));
+            values.SCEPPassword = Environment.GetEnvironmentVariable("EZCA_SCEP_PASSWORD");
+        }
+        if (string.IsNullOrWhiteSpace(values.SCEPPassword))
+        {
+            throw new ArgumentException(
+                "SCEP password is required. Provide it via -p / --SCEPPassword or set the EZCA_SCEP_PASSWORD environment variable."
+            );
         }
     }
 

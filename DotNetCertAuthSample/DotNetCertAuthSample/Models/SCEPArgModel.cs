@@ -48,7 +48,12 @@ public class SCEPArgModel
     )]
     public string? SubjectName { get; set; }
 
-    [Option('p', "SCEPPassword", Required = true, HelpText = "SCEP Password for Static Challenge")]
+    [Option(
+        'p',
+        "SCEPPassword",
+        Required = false,
+        HelpText = "SCEP Password for Static Challenge. Can also be set via the EZCA_SCEP_PASSWORD environment variable to avoid exposing the password in the process command line."
+    )]
     public string? SCEPPassword { get; set; }
 
     [Option(
