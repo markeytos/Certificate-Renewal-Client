@@ -84,7 +84,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
 
     public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        return  CertUtils.GetCACertificates(caSki, localStore);
+        return CertUtils.GetCACertificates(caSki, localStore);
     }
 
     public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)

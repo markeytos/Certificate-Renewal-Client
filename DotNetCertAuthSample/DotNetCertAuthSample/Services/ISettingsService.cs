@@ -22,7 +22,7 @@ public class SettingsService : ISettingsService
         SettingsModel result;
         if (string.IsNullOrWhiteSpace(settingsString))
         {
-            result = new ();
+            result = new();
             SaveSettings(result, logger);
         }
         else
@@ -36,8 +36,9 @@ public class SettingsService : ISettingsService
     {
         string settingsFolder = "certClient";
         string path = CreateFilePath("certClientSettings.json", settingsFolder);
-        settings.RotatedCertificates = settings.RotatedCertificates.Where(rc => rc.ExpiryDate 
-            > DateTime.UtcNow.AddDays(7)).ToList();
+        settings.RotatedCertificates = settings
+            .RotatedCertificates.Where(rc => rc.ExpiryDate > DateTime.UtcNow.AddDays(7))
+            .ToList();
         string settingsString = JsonSerializer.Serialize(settings);
         WriteToFile(path, settingsString, logger, settingsFolder);
     }

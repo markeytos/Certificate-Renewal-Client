@@ -18,7 +18,11 @@ public class CertificateManagerTests
             IStoreService storeService = new UnifiedStoreService();
             ICertStoreService certStoreService = new WindowsCertService(storeService);
             ISystemInfoService systemInfoService = new WindowsSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService, new SettingsService());
+            return new CertificateManager(
+                certStoreService,
+                systemInfoService,
+                new SettingsService()
+            );
 #else
             throw new Exception("Windows-specific services not available in this build.");
 #endif
@@ -29,7 +33,11 @@ public class CertificateManagerTests
             IStoreService storeService = new LinuxStoreService();
             ICertStoreService certStoreService = new UnifiedCertStoreService(storeService);
             ISystemInfoService systemInfoService = new UnifiedSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService,new SettingsService());
+            return new CertificateManager(
+                certStoreService,
+                systemInfoService,
+                new SettingsService()
+            );
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -37,7 +45,11 @@ public class CertificateManagerTests
             IStoreService storeService = new UnifiedStoreService();
             ICertStoreService certStoreService = new UnifiedCertStoreService(storeService);
             ISystemInfoService systemInfoService = new UnifiedSystemInfoService();
-            return new CertificateManager(certStoreService, systemInfoService, new SettingsService());
+            return new CertificateManager(
+                certStoreService,
+                systemInfoService,
+                new SettingsService()
+            );
         }
 
         throw new Exception("Unsupported operating system for tests.");
@@ -228,7 +240,7 @@ public class CertificateManagerTests
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
     }
-    
+
     [Fact]
     [Trait("Privilege", "User")]
     public async Task Renew_All_User_Certificate_UserStore()
@@ -251,12 +263,13 @@ public class CertificateManagerTests
         RenewAllArgModel renewUserArgs = new()
         {
             authoritySubjectKeys = TestConfig.CASubjectKeyIdentifier,
-            LocalCertStore = false
+            LocalCertStore = false,
         };
         manager.InitializeManager(renewUserArgs);
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
     }
+
     [Fact]
     [Trait("Privilege", "Root")]
     public async Task Renew_Machine_All_Certificates_LocalStore()
@@ -284,6 +297,7 @@ public class CertificateManagerTests
         result = await manager.CallCertActionAsync();
         Assert.Equal(0, result);
     }
+
     [Fact]
     [Trait("Privilege", "User")]
     public async Task Renew_User_Certificate_UserStore_CN()
@@ -465,8 +479,6 @@ public class CertificateManagerTests
         Assert.Equal(0, result);
         DeleteCertificateFiles(pfxPath);
     }
-
-    
 
     [Theory]
     [Trait("Privilege", "User")]
