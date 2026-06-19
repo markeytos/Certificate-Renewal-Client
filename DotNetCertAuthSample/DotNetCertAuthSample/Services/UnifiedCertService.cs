@@ -81,7 +81,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
 
     public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
-        return  CertUtils.GetCACertificates(caSki, localStore);
+        return CertUtils.GetCACertificates(caSki, localStore);
     }
 
     public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters key)

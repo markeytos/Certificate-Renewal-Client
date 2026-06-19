@@ -155,10 +155,12 @@ public static class CertUtils
             {
                 string authorityKeyId = GetAuthorityKeyIdentifier(cert);
                 return !string.IsNullOrWhiteSpace(authorityKeyId)
-                       && NormalizeHex(authorityKeyId) == normalizedTargetSki;
+                    && NormalizeHex(authorityKeyId) == normalizedTargetSki;
             })
             .ToList();
-        List<X509Certificate2> expiredCertificates = certificates.Where(x=> x.NotAfter < DateTime.UtcNow.AddMonths(-1)).ToList();
+        List<X509Certificate2> expiredCertificates = certificates
+            .Where(x => x.NotAfter < DateTime.UtcNow.AddMonths(-1))
+            .ToList();
         foreach (X509Certificate2 expiredCertificate in expiredCertificates)
         {
             store.Remove(expiredCertificate);
@@ -166,6 +168,7 @@ public static class CertUtils
         store.Close();
         return certificates;
     }
+
     public static string GetAuthorityKeyIdentifier(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
@@ -196,10 +199,8 @@ public static class CertUtils
                 return Convert.ToHexString(keyIdentifier).ToLowerInvariant();
             }
         }
-        catch 
-        {
-        }
-       
+        catch { }
+
         return string.Empty;
     }
 

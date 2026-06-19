@@ -186,7 +186,10 @@ public class CertificateManager(
                 {
                     if (
                         settings.RotatedCertificates.Any(x =>
-                            x.Thumbprint.Equals(cert.Thumbprint, StringComparison.InvariantCultureIgnoreCase)
+                            x.Thumbprint.Equals(
+                                cert.Thumbprint,
+                                StringComparison.InvariantCultureIgnoreCase
+                            )
                         )
                     )
                     {
@@ -273,7 +276,7 @@ public class CertificateManager(
                 {
                     LogInformation(rdpResult.Message);
                 }
-                else if(!rdpResult.Success)
+                else if (!rdpResult.Success)
                 {
                     LogError(new(rdpResult.Message));
                 }
@@ -605,14 +608,18 @@ public class CertificateManager(
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
 
-        if (string.IsNullOrWhiteSpace(values.Domain) && string.IsNullOrWhiteSpace(values.SourceFile))
+        if (
+            string.IsNullOrWhiteSpace(values.Domain) && string.IsNullOrWhiteSpace(values.SourceFile)
+        )
         {
             throw new ArgumentException("Either --SubjectName or --SourceFile must be provided.");
         }
 
         if (!string.IsNullOrWhiteSpace(values.SourceFile) && !File.Exists(values.SourceFile))
         {
-            throw new FileNotFoundException($"Source certificate file not found: {values.SourceFile}");
+            throw new FileNotFoundException(
+                $"Source certificate file not found: {values.SourceFile}"
+            );
         }
 
         if (values.KeyLength != 2048 && values.KeyLength != 4096)
@@ -1268,26 +1275,83 @@ public class CertificateManager(
         HttpResponseMessage caResponse = await _httpClient.GetAsync(
             string.Concat(scepURL, "?operation=GetCACert&message=ca")
         );
-        if (caResponse.IsSuccessStatusCode)
+        if (!caResponse.IsSuccessStatusCode)
         {
-            byte[] caCertData = await caResponse.Content.ReadAsByteArrayAsync();
-            X509Certificate2 caCert = new(caCertData);
-            // Validate the chain to ensure we trust the CA
-            X509Chain chain = new();
-            if (chain.Build(caCert))
-            {
-                return caCert;
-            }
-
             throw new Exception(
-                "Error building chain for SCEP CA certificate: "
-                    + chain.ChainStatus[0].StatusInformation
+                "Error getting SCEP CA certificate: " + await caResponse.Content.ReadAsStringAsync()
             );
         }
 
+        byte[] caCertData = await caResponse.Content.ReadAsByteArrayAsync();
+        X509Certificate2Collection certs = ParseCaCertificateResponse(caCertData);
+        X509Certificate2 caCert = SelectIssuingCaCertificate(certs);
+        // Validate the chain to ensure we trust the CA
+        X509Chain chain = new();
+        if (certs.Count > 1)
+        {
+            // Allow the chain to use the other certs in the bundle (e.g. the root)
+            // to build the path even if they are not yet in the system store.
+            chain.ChainPolicy.ExtraStore.AddRange(certs);
+        }
+
+        if (chain.Build(caCert))
+        {
+            return caCert;
+        }
+
         throw new Exception(
-            "Error getting SCEP CA certificate: " + await caResponse.Content.ReadAsStringAsync()
+            "Error building chain for SCEP CA certificate: "
+                + chain.ChainStatus[0].StatusInformation
         );
+    }
+
+    /// <summary>
+    /// Parses the body of a SCEP GetCACert response. The body can be either a
+    /// single DER- or PEM-encoded certificate (application/x-x509-ca-cert) or a
+    /// PKCS#7 bundle containing the issuing CA and its parents
+    /// (application/x-x509-ca-ra-cert). Import() transparently handles all of
+    /// these encodings.
+    /// </summary>
+    internal static X509Certificate2Collection ParseCaCertificateResponse(byte[] caCertData)
+    {
+        X509Certificate2Collection certs = [];
+        certs.Import(caCertData);
+        if (certs.Count == 0)
+        {
+            throw new Exception("No certificate found in the SCEP GetCACert response");
+        }
+
+        return certs;
+    }
+
+    /// <summary>
+    /// Selects the issuing CA certificate from a GetCACert response. When the
+    /// response is a PKCS#7 bundle it contains the issuing CA plus its parents;
+    /// the issuing CA is the certificate at the bottom of the hierarchy, i.e. the
+    /// one whose subject is not the issuer of any other certificate in the bundle.
+    /// </summary>
+    internal static X509Certificate2 SelectIssuingCaCertificate(X509Certificate2Collection certs)
+    {
+        if (certs.Count == 1)
+        {
+            return certs[0];
+        }
+
+        foreach (X509Certificate2 candidate in certs)
+        {
+            bool issuesAnotherCert = certs
+                .Cast<X509Certificate2>()
+                .Any(other =>
+                    !ReferenceEquals(other, candidate)
+                    && other.IssuerName.RawData.SequenceEqual(candidate.SubjectName.RawData)
+                );
+            if (!issuesAnotherCert)
+            {
+                return candidate;
+            }
+        }
+
+        return certs[0];
     }
 
     private string GetComputerSubjectName()
