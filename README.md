@@ -14,14 +14,27 @@ This application can be used in combination with Windows Task Scheduler or Linux
 
 This application supports **Windows**, **Mac**, **Linux** platforms:
 
-- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
+- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration, IIS bindings)
 - **Linux**: Uses file-based certificate storage in `~/.local/share/keytos/certs` (user store) or `/etc/keytos/certs` (machine store)
 - **Mac**: Uses Mac Keychain Access
 
 **Note**: Some features are Windows-specific:
 - RDP certificate configuration (requires Windows)
+- IIS binding configuration (requires Windows with IIS installed)
 - Domain Controller certificate features (requires Active Directory)
 - Windows Certificate Store integration
+
+### IIS bindings
+
+`create` and `renew` accept `--IIS` to bind the new certificate to the machine's IIS https bindings. The certificate has to go to the machine store, so `--LocalStore` is required. By default only the bindings whose host name the certificate covers are updated; pass `--IISSite "<site name>"` to update every https binding of one site instead (this is what you want for a binding with no host name, such as the default `*:443:`).
+
+```powershell
+.\EZCACertManager.exe renew -s "www.contoso.com" --LocalStore --IIS
+```
+
+`renewAll` needs no flag. Every IIS https binding pointing at a certificate it renews is moved to the renewed certificate automatically, the same way RDP bindings are. Bindings that use the IIS Central Certificate Store are left alone, since those are managed by the store itself rather than by thumbprint.
+
+All of these need to run elevated, and IIS binding changes are written to `applicationHost.config`.
 
 ## Installation
 
