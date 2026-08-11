@@ -24,7 +24,8 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         List<string> ekus,
         string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
         X509KeyUsageFlags? keyUsageFlags = null,
-        bool makePrivateKeyExportable = false
+        bool makePrivateKeyExportable = false,
+        HashAlgorithmName? hashAlgorithm = null
     )
     {
         CX509CertificateRequestPkcs10 certRequest = new();
@@ -50,6 +51,14 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         certRequest.PrivateKey.MachineContext = localStore;
         certRequest.PrivateKey.ProviderName = KeyProvider;
         certRequest.PrivateKey.Create();
+        CObjectId hashAlgorithmId = new();
+        hashAlgorithmId.InitializeFromAlgorithmName(
+            ObjectIdGroupId.XCN_CRYPT_HASH_ALG_OID_GROUP_ID,
+            ObjectIdPublicKeyFlags.XCN_CRYPT_OID_INFO_PUBKEY_ANY,
+            AlgorithmFlags.AlgorithmFlagsNone,
+            (hashAlgorithm ?? HashAlgorithmName.SHA256).Name ?? "SHA256"
+        );
+        certRequest.HashAlgorithm = hashAlgorithmId;
         CX500DistinguishedName objDN = new();
         certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
         objDN.Encode(subjectName, X500NameFlags.XCN_CERT_NAME_STR_NONE);
