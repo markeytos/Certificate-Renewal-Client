@@ -47,7 +47,7 @@ public class CreateDCCertificate
     [Option(
         "DCSid",
         Required = false,
-        HelpText = "Domain Controller SID. Due to KB5014754 we now need to add the On-premises security identifier (SID) of the domain controller. Learn more: https://directaccess.richardhicks.com/2024/11/12/powershell-script-to-display-user-or-computer-sid/"
+        HelpText = "Domain Controller SID (e.g. S-1-5-21-...). Due to KB5014754 we now need to add the On-premises security identifier (SID) of the domain controller. Learn more: https://directaccess.richardhicks.com/2024/11/12/powershell-script-to-display-user-or-computer-sid/"
     )]
     public string DCSid { get; set; } = "";
 
