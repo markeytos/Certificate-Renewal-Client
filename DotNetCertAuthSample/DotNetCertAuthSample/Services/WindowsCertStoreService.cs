@@ -51,7 +51,10 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         certRequest.PrivateKey.ProviderName = KeyProvider;
         certRequest.PrivateKey.Create();
         CX500DistinguishedName objDN = new();
-        certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
+        if (sans.Count > 0)
+        {
+            certRequest.X509Extensions.Add((CX509Extension)CreateSans(sans));
+        }
         objDN.Encode(subjectName, X500NameFlags.XCN_CERT_NAME_STR_NONE);
         certRequest.Subject = objDN;
         // Key Usage Extension
