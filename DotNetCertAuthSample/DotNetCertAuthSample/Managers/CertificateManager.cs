@@ -1184,10 +1184,7 @@ public class CertificateManager(
         if (!string.IsNullOrWhiteSpace(values.SubjectAltNames))
         {
             GeneralNames subjectAlternateNames = new(
-                values
-                    .SubjectAltNames.Split(',')
-                    .Select(dnsName => new GeneralName(GeneralName.DnsName, dnsName))
-                    .ToArray()
+                SubjectAlternativeNameParser.Parse(values.SubjectAltNames)
             );
             extensions.AddExtension(
                 X509Extensions.SubjectAlternativeName,
