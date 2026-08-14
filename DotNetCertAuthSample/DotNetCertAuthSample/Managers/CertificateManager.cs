@@ -832,7 +832,8 @@ public class CertificateManager(
                 values.KeyProvider,
                 additionalSANs,
                 values.Path,
-                values.Password
+                values.Password,
+                values.DCSid
             );
         }
         catch (Exception ex)
@@ -1433,7 +1434,8 @@ public class CertificateManager(
         string keyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
         List<string>? additionalSubjectAltNames = null,
         string? path = "",
-        string? password = null
+        string? password = null,
+        string sid = ""
     )
     {
         if (_logger == null)
@@ -1497,7 +1499,8 @@ public class CertificateManager(
                 domain,
                 validity,
                 ekus,
-                dcGUID
+                dcGUID,
+                sid
             );
         }
         else

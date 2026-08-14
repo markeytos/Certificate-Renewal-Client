@@ -43,6 +43,13 @@ public class CreateDCCertificate
         HelpText = "Domain Controller GUID. This is only required if SMTP replication is used in your domain. Learn more: https://learn.microsoft.com/en-US/troubleshoot/windows-server/windows-security/requirements-domain-controller#how-to-determine-the-domain-controller-guid"
     )]
     public string DCGUID { get; set; } = "";
+    
+    [Option(
+        "DCSid",
+        Required = false,
+        HelpText = "Domain Controller SID (e.g. S-1-5-21-...). Due to KB5014754 we now need to add the On-premises security identifier (SID) of the domain controller. Learn more: https://directaccess.richardhicks.com/2024/11/12/powershell-script-to-display-user-or-computer-sid/"
+    )]
+    public string DCSid { get; set; } = "";
 
     [Option(
         "AppInsights",
