@@ -65,8 +65,13 @@ public class RenewArgModel
     [Option('i', "Issuer", Required = false, Default = "", HelpText = "Certificate Issuer Name")]
     public string issuer { get; set; } = "";
 
-    [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
-    public int KeyLength { get; set; } = 4096;
+    [Option(
+        'k',
+        "KeyLength",
+        Required = false,
+        HelpText = "Certificate Key Length. If not specified, the key length of the certificate being renewed is used."
+    )]
+    public int? KeyLength { get; set; }
 
     [Option(
         'p',

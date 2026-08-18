@@ -39,6 +39,22 @@ public static class CertUtils
         throw new ArgumentException("Certificate Key not supported");
     }
 
+    public static HashAlgorithmName GetHashAlgorithm(X509Certificate2 cert)
+    {
+        ArgumentNullException.ThrowIfNull(cert);
+
+        // Anything else (SHA1, MD5, or an algorithm that does not carry the hash in its OID such
+        // as RSASSA-PSS) falls back to SHA256 so we never sign a request with a weaker hash
+        return cert.SignatureAlgorithm.Value switch
+        {
+            // sha384WithRSAEncryption, ecdsa-with-SHA384
+            "1.2.840.113549.1.1.12" or "1.2.840.10045.4.3.3" => HashAlgorithmName.SHA384,
+            // sha512WithRSAEncryption, ecdsa-with-SHA512
+            "1.2.840.113549.1.1.13" or "1.2.840.10045.4.3.4" => HashAlgorithmName.SHA512,
+            _ => HashAlgorithmName.SHA256,
+        };
+    }
+
     public static int GetPercentageOfLifetimeLeft(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);
