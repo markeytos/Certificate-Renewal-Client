@@ -59,7 +59,10 @@ public class SCEPArgModel
     [Option(
         "SubjectAltNames",
         Required = false,
-        HelpText = "Subject Alternate Names for this certificate for example (comma separate multiple): server1.constoso.com,server2.contoso.com"
+        HelpText = "Subject Alternative Names for this certificate (comma separated multiple): server1.contoso.com,server2.contoso.com. "
+            + "Each name defaults to a DNS name, prefix it to request another type: DNS=, UPN=, IP=, RFC822= (or EMAIL=), URI= (or URL=), SID=. "
+            + "For example: server1.contoso.com,UPN=user@contoso.com,IP=10.0.0.5,SID=S-1-5-21-1-2-3-1000. "
+            + "Escape a comma inside a value with a backslash."
     )]
     public string? SubjectAltNames { get; set; }
 
