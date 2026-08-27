@@ -18,4 +18,18 @@ public class UnifiedSystemInfoService : ISystemInfoService
     {
         throw new NotSupportedException("RDP is only available on Windows");
     }
+
+    public APIResultModel SetIISCertificate(
+        string thumbprint,
+        string? siteName,
+        IReadOnlyList<string> certificateHostNames
+    )
+    {
+        throw new NotSupportedException("IIS is only available on Windows");
+    }
+
+    public APIResultModel CheckIfIISCertAndRenew(string oldCertThumbprint, string newCertThumbprint)
+    {
+        throw new NotSupportedException("IIS is only available on Windows");
+    }
 }
