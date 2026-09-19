@@ -15,17 +15,9 @@ public class RenewArgModel
     public bool RDPCert { get; set; }
 
     [Option(
-        "IIS",
-        Required = false,
-        Default = false,
-        HelpText = "whether this certificate should be bound to the machine's IIS https bindings. Requires --LocalStore"
-    )]
-    public bool IISCert { get; set; }
-
-    [Option(
         "IISSite",
         Required = false,
-        HelpText = "Name of the IIS site to bind the certificate to. Only valid with --IIS. If omitted, the certificate is bound to every IIS https binding whose host name it covers"
+        HelpText = "Name of the IIS site whose https bindings this certificate should be bound to. Requires --LocalStore. If omitted, IIS is left alone"
     )]
     public string? IISSite { get; set; }
 

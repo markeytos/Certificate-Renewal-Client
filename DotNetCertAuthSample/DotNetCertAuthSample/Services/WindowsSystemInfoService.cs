@@ -101,12 +101,13 @@ public class WindowsSystemInfoService : ISystemInfoService
         return new(true, "RDP certificate updated successfully");
     }
 
-    public APIResultModel SetIISCertificate(
-        string thumbprint,
-        string? siteName,
-        IReadOnlyList<string> certificateHostNames
-    )
+    public APIResultModel SetIISCertificate(string thumbprint, string? siteName)
     {
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            // no site was asked for, so IIS is not part of this request
+            return new(true, "");
+        }
         if (!IsIISInstalled())
         {
             return new(false, "IIS is not installed on this machine");
@@ -115,12 +116,10 @@ public class WindowsSystemInfoService : ISystemInfoService
         try
         {
             using ServerManager manager = new();
-            if (
-                !string.IsNullOrWhiteSpace(siteName)
-                && !manager.Sites.Any(site =>
-                    site.Name.Equals(siteName, StringComparison.OrdinalIgnoreCase)
-                )
-            )
+            Site? site = manager.Sites.FirstOrDefault(candidate =>
+                candidate.Name.Equals(siteName, StringComparison.OrdinalIgnoreCase)
+            );
+            if (site == null)
             {
                 return new(
                     false,
@@ -129,41 +128,22 @@ public class WindowsSystemInfoService : ISystemInfoService
             }
             List<BindingTarget> targets = [];
             List<string> centralCertStoreBindings = [];
-            foreach (Site site in manager.Sites)
+            foreach (Binding binding in site.Bindings)
             {
-                if (
-                    !string.IsNullOrWhiteSpace(siteName)
-                    && !site.Name.Equals(siteName, StringComparison.OrdinalIgnoreCase)
-                )
+                if (!IsHttpsBinding(binding))
                 {
                     continue;
                 }
-                foreach (Binding binding in site.Bindings)
+                if (UsesCentralCertificateStore(binding))
                 {
-                    if (!IsHttpsBinding(binding))
-                    {
-                        continue;
-                    }
-                    if (UsesCentralCertificateStore(binding))
-                    {
-                        centralCertStoreBindings.Add(Describe(site, binding));
-                        continue;
-                    }
-                    // an explicitly named site takes every https binding it has, otherwise we
-                    // only touch the bindings whose host name this certificate actually covers
-                    if (
-                        string.IsNullOrWhiteSpace(siteName)
-                        && !CertificateCoversHost(certificateHostNames, binding.Host)
-                    )
-                    {
-                        continue;
-                    }
-                    targets.Add(new(site, binding));
+                    centralCertStoreBindings.Add(Describe(site, binding));
+                    continue;
                 }
+                targets.Add(new(site, binding));
             }
             if (targets.Count == 0)
             {
-                return new(false, NoBindingMessage(manager, siteName, centralCertStoreBindings));
+                return new(false, NoBindingMessage(siteName, centralCertStoreBindings));
             }
             APIResultModel storeCheck = CheckCertificateIsInStores(targets, thumbprint);
             if (!storeCheck.Success)
@@ -341,62 +321,14 @@ public class WindowsSystemInfoService : ISystemInfoService
         }
     }
 
-    /// <summary>
-    /// Matches an IIS binding host name against the names the certificate was issued for.
-    /// Bindings without a host name never match on their own, they need an explicit site.
-    /// </summary>
-    internal static bool CertificateCoversHost(
-        IReadOnlyList<string> certificateHostNames,
-        string host
-    )
-    {
-        if (string.IsNullOrWhiteSpace(host))
-        {
-            return false;
-        }
-        foreach (string name in certificateHostNames)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-            if (name.Equals(host, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            if (!name.StartsWith("*.", StringComparison.Ordinal))
-            {
-                continue;
-            }
-            // a wildcard only covers a single label, *.contoso.com matches www.contoso.com
-            string suffix = name[1..];
-            if (
-                host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-                && host.IndexOf('.') == host.Length - suffix.Length
-            )
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static string NoBindingMessage(
-        ServerManager manager,
         string? siteName,
         List<string> centralCertStoreBindings
-    )
-    {
-        if (!string.IsNullOrWhiteSpace(siteName))
-        {
-            return centralCertStoreBindings.Count > 0
-                ? $"The IIS site '{siteName}' only has https bindings that use the Central Certificate Store, "
-                    + "those are managed by the store itself and cannot be bound to a thumbprint"
-                : $"The IIS site '{siteName}' does not have any https bindings";
-        }
-        return "No IIS https binding matched the names in this certificate. "
-            + $"Use --IISSite to pick the site to bind it to. {DescribeAvailableBindings(manager)}";
-    }
+    ) =>
+        centralCertStoreBindings.Count > 0
+            ? $"The IIS site '{siteName}' only has https bindings that use the Central Certificate Store, "
+                + "those are managed by the store itself and cannot be bound to a thumbprint"
+            : $"The IIS site '{siteName}' does not have any https bindings";
 
     private static string DescribeAvailableBindings(ServerManager manager)
     {

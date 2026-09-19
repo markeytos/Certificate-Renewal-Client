@@ -10,15 +10,10 @@ public interface ISystemInfoService
     APIResultModel CheckIfRDPCertAndRenew(string oldCertThumbprint, string newCertThumbprint);
 
     /// <summary>
-    /// Binds the certificate to the machine's IIS https bindings. When a site name is
-    /// given every https binding of that site is updated, otherwise only the bindings
-    /// whose host name is covered by the certificate are updated.
+    /// Binds the certificate to every https binding of the named IIS site. An empty
+    /// site name means IIS was not requested, so nothing is done.
     /// </summary>
-    APIResultModel SetIISCertificate(
-        string thumbprint,
-        string? siteName,
-        IReadOnlyList<string> certificateHostNames
-    );
+    APIResultModel SetIISCertificate(string thumbprint, string? siteName);
 
     /// <summary>
     /// Updates every IIS https binding that is currently using the old certificate so

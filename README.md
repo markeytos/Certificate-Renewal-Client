@@ -26,10 +26,10 @@ This application supports **Windows**, **Mac**, **Linux** platforms:
 
 ### IIS bindings
 
-`create` and `renew` accept `--IIS` to bind the new certificate to the machine's IIS https bindings. The certificate has to go to the machine store, so `--LocalStore` is required. By default only the bindings whose host name the certificate covers are updated; pass `--IISSite "<site name>"` to update every https binding of one site instead (this is what you want for a binding with no host name, such as the default `*:443:`).
+`create` and `renew` accept `--IISSite "<site name>"` to bind the new certificate to every https binding of that IIS site. The certificate has to go to the machine store, so `--LocalStore` is required. Without `--IISSite` nothing in IIS is touched.
 
 ```powershell
-.\EZCACertManager.exe renew -s "www.contoso.com" --LocalStore --IIS
+.\EZCACertManager.exe renew -s "www.contoso.com" --LocalStore --IISSite "Default Web Site"
 ```
 
 `renewAll` needs no flag. Every IIS https binding pointing at a certificate it renews is moved to the renewed certificate automatically, the same way RDP bindings are. Bindings that use the IIS Central Certificate Store are left alone, since those are managed by the store itself rather than by thumbprint.

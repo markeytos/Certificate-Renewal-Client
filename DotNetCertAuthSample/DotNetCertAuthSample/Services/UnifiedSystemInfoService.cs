@@ -19,17 +19,19 @@ public class UnifiedSystemInfoService : ISystemInfoService
         throw new NotSupportedException("RDP is only available on Windows");
     }
 
-    public APIResultModel SetIISCertificate(
-        string thumbprint,
-        string? siteName,
-        IReadOnlyList<string> certificateHostNames
-    )
+    public APIResultModel SetIISCertificate(string thumbprint, string? siteName)
     {
-        throw new NotSupportedException("IIS is only available on Windows");
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            return new(true, "");
+        }
+
+        return new(false, "IIS is only available on Windows");
     }
 
     public APIResultModel CheckIfIISCertAndRenew(string oldCertThumbprint, string newCertThumbprint)
     {
-        throw new NotSupportedException("IIS is only available on Windows");
+        // nothing to renew, this machine cannot be running IIS
+        return new(true, "");
     }
 }

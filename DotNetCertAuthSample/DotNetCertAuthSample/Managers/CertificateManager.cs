@@ -399,7 +399,7 @@ public class CertificateManager(
                 );
             }
 
-            if (values.IISCert)
+            if (!string.IsNullOrWhiteSpace(values.IISSite))
             {
                 LogInformation($"Setting IIS certificate");
                 SetIISCertificate(certReturned, values.IISSite);
@@ -625,7 +625,7 @@ public class CertificateManager(
     private void AssertCorrectRenewArgModel(RenewArgModel values)
     {
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
-        AssertIisSupported(values.IISCert, values.IISSite, values.LocalCertStore);
+        AssertIisSupported(values.IISSite, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
 
         if (
@@ -663,15 +663,10 @@ public class CertificateManager(
         }
     }
 
-    private static void AssertIisSupported(bool iisCert, string? iisSite, bool localCertStore)
+    private static void AssertIisSupported(string? iisSite, bool localCertStore)
     {
-        if (!iisCert)
+        if (string.IsNullOrWhiteSpace(iisSite))
         {
-            if (!string.IsNullOrWhiteSpace(iisSite))
-            {
-                throw new ArgumentException("--IISSite can only be used together with --IIS");
-            }
-
             return;
         }
 
@@ -732,7 +727,7 @@ public class CertificateManager(
                 SetRDPCertificate(createdCertificate.Thumbprint);
             }
 
-            if (values.IISCert)
+            if (!string.IsNullOrWhiteSpace(values.IISSite))
             {
                 LogInformation($"Setting IIS certificate");
                 SetIISCertificate(createdCertificate, values.IISSite);
@@ -750,7 +745,7 @@ public class CertificateManager(
     private void ValidateGenerateArgModel(GenerateArgModel values)
     {
         AssertRdpSupported(values.RDPCert, values.LocalCertStore);
-        AssertIisSupported(values.IISCert, values.IISSite, values.LocalCertStore);
+        AssertIisSupported(values.IISSite, values.LocalCertStore);
         AssertLocalStoreProperties(values.LocalCertStore);
         AssertCertificatePathProperties(values.Path);
         if (!IsGuid(values.caID))
@@ -1476,10 +1471,14 @@ public class CertificateManager(
 
     private void SetIISCertificate(X509Certificate2 certificate, string? siteName)
     {
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            return;
+        }
+
         APIResultModel result = systemInfoService.SetIISCertificate(
             certificate.Thumbprint,
-            siteName,
-            GetCertificateHostNames(certificate)
+            siteName
         );
         if (!result.Success)
         {
@@ -1487,25 +1486,6 @@ public class CertificateManager(
         }
 
         LogInformation(result.Message);
-    }
-
-    private static List<string> GetCertificateHostNames(X509Certificate2 certificate)
-    {
-        List<string> hostNames = GetSubjectAlternativeNames(certificate)
-            .Where(i => i.Type == SANTypes.DNSName)
-            .Select(i => i.Value)
-            .ToList();
-        // certificates issued without SANs only carry the host name in the common name
-        string commonName = certificate.GetNameInfo(X509NameType.SimpleName, false);
-        if (
-            !string.IsNullOrWhiteSpace(commonName)
-            && !hostNames.Contains(commonName, StringComparer.OrdinalIgnoreCase)
-        )
-        {
-            hostNames.Add(commonName);
-        }
-
-        return hostNames;
     }
 
     private async Task<X509Certificate2> CreateCertificateAsync(

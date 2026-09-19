@@ -6,71 +6,26 @@ using Xunit;
 namespace DotNetCertAuthSample.Test;
 
 /// <summary>
-/// Offline unit tests for the IIS binding selection. When no site is named on the
-/// command line the client only rebinds the https bindings whose host name the
-/// certificate actually covers, so this matching decides which sites are touched.
+/// Offline unit tests for the IIS binding selection. IIS is only touched when a site
+/// is named on the command line, so these cover the cases that decide whether the
+/// client does anything at all.
 /// </summary>
 public class IISBindingMatchingTests
 {
-    [Theory]
-    [InlineData("www.contoso.com", "www.contoso.com")]
-    [InlineData("WWW.CONTOSO.COM", "www.contoso.com")]
-    [InlineData("www.contoso.com", "WWW.CONTOSO.COM")]
-    public void CertificateCoversHost_MatchesExactNameIgnoringCase(
-        string certificateName,
-        string host
-    )
-    {
-        Assert.True(WindowsSystemInfoService.CertificateCoversHost([certificateName], host));
-    }
-
-    [Theory]
-    [InlineData("*.contoso.com", "www.contoso.com")]
-    [InlineData("*.contoso.com", "api.contoso.com")]
-    public void CertificateCoversHost_MatchesSingleLabelUnderWildcard(
-        string certificateName,
-        string host
-    )
-    {
-        Assert.True(WindowsSystemInfoService.CertificateCoversHost([certificateName], host));
-    }
-
-    [Theory]
-    [InlineData("*.contoso.com", "a.b.contoso.com")] // wildcards only cover one label
-    [InlineData("*.contoso.com", "contoso.com")]
-    [InlineData("www.contoso.com", "www.fabrikam.com")]
-    [InlineData("www.contoso.com", "notwww.contoso.com")]
-    public void CertificateCoversHost_RejectsNamesOutsideTheCertificate(
-        string certificateName,
-        string host
-    )
-    {
-        Assert.False(WindowsSystemInfoService.CertificateCoversHost([certificateName], host));
-    }
-
-    [Fact]
-    public void CertificateCoversHost_MatchesAnyOfTheCertificateNames()
-    {
-        string[] names = ["contoso.com", "www.contoso.com", "*.dev.contoso.com"];
-        Assert.True(WindowsSystemInfoService.CertificateCoversHost(names, "www.contoso.com"));
-        Assert.True(WindowsSystemInfoService.CertificateCoversHost(names, "api.dev.contoso.com"));
-        Assert.False(WindowsSystemInfoService.CertificateCoversHost(names, "www.fabrikam.com"));
-    }
-
     /// <summary>
-    /// A binding with no host name answers every request that reaches its ip and port,
-    /// so it is never picked up by name matching. Those need an explicit --IISSite.
+    /// No --IISSite means IIS was never asked for, so the call has to be a no-op even
+    /// on a machine that does not run IIS at all.
     /// </summary>
-    [Fact]
-    public void CertificateCoversHost_DoesNotMatchCatchAllBinding()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetIISCertificate_IsANoOpWithoutASiteName(string? siteName)
     {
-        Assert.False(WindowsSystemInfoService.CertificateCoversHost(["www.contoso.com"], ""));
-    }
-
-    [Fact]
-    public void CertificateCoversHost_IgnoresEmptyCertificateNames()
-    {
-        Assert.False(WindowsSystemInfoService.CertificateCoversHost(["", "  "], "www.contoso.com"));
+        WindowsSystemInfoService service = new();
+        APIResultModel result = service.SetIISCertificate(new string('A', 40), siteName);
+        Assert.True(result.Success);
+        Assert.Empty(result.Message);
     }
 
     /// <summary>
@@ -103,11 +58,7 @@ public class IISBindingMatchingTests
         }
 
         WindowsSystemInfoService service = new();
-        APIResultModel result = service.SetIISCertificate(
-            new string('A', 40),
-            null,
-            ["www.contoso.com"]
-        );
+        APIResultModel result = service.SetIISCertificate(new string('A', 40), "Default Web Site");
         Assert.False(result.Success);
         Assert.Contains("IIS is not installed", result.Message);
     }
