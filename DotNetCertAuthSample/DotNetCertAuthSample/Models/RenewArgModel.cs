@@ -15,6 +15,13 @@ public class RenewArgModel
     public bool RDPCert { get; set; }
 
     [Option(
+        "IISSite",
+        Required = false,
+        HelpText = "Name of the IIS site whose https bindings this certificate should be bound to. Requires --LocalStore. If omitted, IIS is left alone"
+    )]
+    public string? IISSite { get; set; }
+
+    [Option(
         's',
         "SubjectName",
         Required = false,

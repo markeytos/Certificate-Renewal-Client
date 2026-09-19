@@ -14,14 +14,36 @@ This application can be used in combination with Windows Task Scheduler or Linux
 
 This application supports **Windows**, **Mac**, **Linux** platforms:
 
-- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration)
+- **Windows**: Uses Windows Certificate Store and Windows-specific APIs (CertEnroll, Active Directory, RDP configuration, IIS bindings)
 - **Linux**: Uses file-based certificate storage in `~/.local/share/keytos/certs` (user store) or `/etc/keytos/certs` (machine store)
 - **Mac**: Uses Mac Keychain Access
 
 **Note**: Some features are Windows-specific:
 - RDP certificate configuration (requires Windows)
+- IIS binding configuration (requires Windows with IIS installed)
 - Domain Controller certificate features (requires Active Directory)
 - Windows Certificate Store integration
+
+### IIS bindings
+
+`create` and `renew` accept `--IISSite "<site name>"` to bind the new certificate to the https bindings of that IIS site. The certificate has to go to the machine store, so `--LocalStore` is required. Without `--IISSite` nothing in IIS is touched.
+
+```powershell
+.\EZCACertManager.exe renew -s "www.contoso.com" --LocalStore --IISSite "Default Web Site"
+```
+
+Within the named site, a binding is only rebound when the certificate can actually serve it:
+
+- A binding whose host name the certificate covers is rebound. Names come from the certificate's DNS SANs, falling back to its common name, and a wildcard stands in for exactly one label, so `*.contoso.com` covers `www.contoso.com` but not `a.b.contoso.com` or `contoso.com`.
+- A binding with no host name (`*:443:`) is rebound, since it serves whatever reaches the site and the site was named explicitly.
+- A binding serving some other host name is left alone and named in the output, so a second site name sharing the same IIS site does not get pointed at a certificate that cannot serve it.
+- If nothing in the site matches, the command fails and lists what it found rather than guessing.
+
+`renewAll` needs no flag. Every IIS https binding pointing at a certificate it renews is moved to the renewed certificate automatically, the same way RDP bindings are. Bindings that use the IIS Central Certificate Store are left alone, since those are managed by the store itself rather than by thumbprint.
+
+Bindings keep whichever store they already read from. Certificates are issued into `LocalMachine\MY`, so a binding on another store (`WebHosting`, typically) gets a copy of the certificate placed in that store rather than being moved to `MY` or refused.
+
+All of these need to run elevated, and IIS binding changes are written to `applicationHost.config`.
 
 ## Installation
 
