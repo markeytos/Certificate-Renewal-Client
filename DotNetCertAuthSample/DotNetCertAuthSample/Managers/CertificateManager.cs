@@ -399,18 +399,18 @@ public class CertificateManager(
                 );
             }
 
-            if (!string.IsNullOrWhiteSpace(values.IISSite))
-            {
-                LogInformation($"Setting IIS certificate");
-                SetIISCertificate(certReturned, values.IISSite);
-            }
-
             await CheckAndSaveCertificateToPathAsync(
                 certReturned,
                 values.LocalCertStore,
                 values.Path,
                 values.Password
             );
+
+            if (!string.IsNullOrWhiteSpace(values.IISSite))
+            {
+                LogInformation($"Setting IIS certificate");
+                SetIISCertificate(certReturned, values.IISSite);
+            }
         }
         catch (Exception ex)
         {

@@ -2,6 +2,8 @@
 using System.DirectoryServices.AccountManagement;
 using System.Globalization;
 using System.Net;
+using System.Security;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using EZCAClient.Models;
 using Microsoft.Management.Infrastructure;
@@ -14,6 +16,7 @@ public class WindowsSystemInfoService : ISystemInfoService
 {
     private const string DefaultCertificateStoreName = "MY";
     private const string HttpsProtocol = "https";
+    private const string SubjectAlternativeNameOid = "2.5.29.17";
 
     public string? GetComputerDistinguishedName(string computerName)
     {
@@ -126,8 +129,24 @@ public class WindowsSystemInfoService : ISystemInfoService
                     $"IIS site '{siteName}' was not found. {DescribeAvailableBindings(manager)}"
                 );
             }
+            StoreLookup lookup = FindInStore(DefaultCertificateStoreName, thumbprint);
+            if (lookup.Failed)
+            {
+                return new(false, $"Error setting IIS certificate: {lookup.Error}");
+            }
+            if (lookup.Certificate == null)
+            {
+                return new(
+                    false,
+                    $"Certificate {thumbprint} was not found in LocalMachine\\{DefaultCertificateStoreName}. "
+                        + "Issue it with --LocalStore so that IIS can read it"
+                );
+            }
+            using X509Certificate2 certificate = lookup.Certificate;
+            List<string> certificateNames = GetCertificateNames(certificate);
             List<BindingTarget> targets = [];
             List<string> centralCertStoreBindings = [];
+            List<string> foreignNameBindings = [];
             foreach (Binding binding in site.Bindings)
             {
                 if (!IsHttpsBinding(binding))
@@ -139,30 +158,48 @@ public class WindowsSystemInfoService : ISystemInfoService
                     centralCertStoreBindings.Add(Describe(site, binding));
                     continue;
                 }
+                string host = binding.Host ?? string.Empty;
+                // a binding with no host name serves whatever reaches the site, and the
+                // site was named on the command line, so it is taken. A binding that does
+                // name a host the certificate cannot serve belongs to someone else and is
+                // left alone rather than broken
+                if (host.Length > 0 && !CoversHost(certificateNames, host))
+                {
+                    foreignNameBindings.Add($"{Describe(site, binding)} serving {host}");
+                    continue;
+                }
                 targets.Add(new(site, binding));
             }
             if (targets.Count == 0)
             {
-                return new(false, NoBindingMessage(siteName, centralCertStoreBindings));
+                return new(
+                    false,
+                    NoBindingMessage(
+                        siteName,
+                        certificateNames,
+                        centralCertStoreBindings,
+                        foreignNameBindings
+                    )
+                );
             }
-            APIResultModel storeCheck = CheckCertificateIsInStores(targets, thumbprint);
+            APIResultModel storeCheck = EnsureCertificateIsInBindingStores(targets, thumbprint);
             if (!storeCheck.Success)
             {
-                return storeCheck;
+                return new(
+                    false,
+                    $"Could not bind the certificate to IIS site '{siteName}': {storeCheck.Message}"
+                );
             }
             foreach (BindingTarget target in targets)
             {
                 ApplyCertificateToBinding(target.Binding, thumbprint);
             }
             manager.CommitChanges();
-            string message =
+            return new(
+                true,
                 $"IIS certificate set successfully for {DescribeAll(targets)}"
-                + (
-                    centralCertStoreBindings.Count > 0
-                        ? $". Skipped {string.Join(", ", centralCertStoreBindings)} because they use the IIS Central Certificate Store"
-                        : string.Empty
-                );
-            return new(true, message);
+                    + DescribeSkipped(centralCertStoreBindings, foreignNameBindings)
+            );
         }
         catch (Exception ex)
         {
@@ -200,29 +237,31 @@ public class WindowsSystemInfoService : ISystemInfoService
             {
                 return new(true, "");
             }
-            // a binding whose store does not hold the renewed certificate would be left
-            // pointing at nothing, so it is reported instead of being updated
+            // a binding whose store cannot be made to hold the renewed certificate would
+            // be left pointing at nothing, so it is reported instead of being updated
             List<BindingTarget> updatable = [];
             List<string> unavailable = [];
             foreach (BindingTarget target in targets)
             {
-                if (IsCertificateInStore(GetBindingStoreName(target.Binding), newCertThumbprint))
+                string? error = EnsureCertificateInBindingStore(
+                    GetBindingStoreName(target.Binding),
+                    newCertThumbprint
+                );
+                if (error == null)
                 {
                     updatable.Add(target);
                 }
                 else
                 {
-                    unavailable.Add(
-                        $"{Describe(target.Site, target.Binding)} (LocalMachine\\{GetBindingStoreName(target.Binding)})"
-                    );
+                    unavailable.Add($"{Describe(target.Site, target.Binding)}: {error}");
                 }
             }
             if (updatable.Count == 0)
             {
                 return new(
                     false,
-                    $"Could not update the IIS binding(s) {string.Join(", ", unavailable)} because the renewed "
-                        + $"certificate {newCertThumbprint} is not in the store those bindings read from"
+                    "Could not move any IIS binding onto the renewed certificate. "
+                        + string.Join("; ", unavailable)
                 );
             }
             foreach (BindingTarget target in updatable)
@@ -230,16 +269,15 @@ public class WindowsSystemInfoService : ISystemInfoService
                 ApplyCertificateToBinding(target.Binding, newCertThumbprint);
             }
             manager.CommitChanges();
-            if (unavailable.Count > 0)
-            {
-                return new(
-                    false,
-                    $"IIS certificate updated successfully for {DescribeAll(updatable)}, but the binding(s) "
-                        + $"{string.Join(", ", unavailable)} were left unchanged because the renewed certificate "
-                        + $"{newCertThumbprint} is not in the store those bindings read from"
-                );
-            }
-            return new(true, $"IIS certificate updated successfully for {DescribeAll(updatable)}");
+            return new(
+                true,
+                $"IIS certificate updated successfully for {DescribeAll(updatable)}"
+                    + (
+                        unavailable.Count > 0
+                            ? $". Left unchanged: {string.Join("; ", unavailable)}"
+                            : string.Empty
+                    )
+            );
         }
         catch (Exception ex)
         {
@@ -282,7 +320,57 @@ public class WindowsSystemInfoService : ISystemInfoService
         binding.CertificateHash = Convert.FromHexString(thumbprint);
     }
 
-    private static APIResultModel CheckCertificateIsInStores(
+    /// <summary>
+    /// The DNS names the certificate can serve: its SANs, plus the common name so that a
+    /// certificate issued without a SAN extension still resolves to something.
+    /// </summary>
+    internal static List<string> GetCertificateNames(X509Certificate2 certificate)
+    {
+        List<string> names = [];
+        foreach (X509Extension extension in certificate.Extensions)
+        {
+            if (extension.Oid?.Value != SubjectAlternativeNameOid)
+            {
+                continue;
+            }
+            X509SubjectAlternativeNameExtension san = new(extension.RawData, extension.Critical);
+            names.AddRange(san.EnumerateDnsNames());
+        }
+        string commonName = certificate.GetNameInfo(X509NameType.DnsName, false);
+        if (!string.IsNullOrWhiteSpace(commonName))
+        {
+            names.Add(commonName);
+        }
+        return [.. names.Distinct(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    internal static bool CoversHost(List<string> certificateNames, string host) =>
+        certificateNames.Any(name => NameCoversHost(name, host));
+
+    /// <summary>
+    /// A wildcard in a certificate only ever stands in for a single label, so
+    /// *.contoso.com covers www.contoso.com but neither a.b.contoso.com nor contoso.com.
+    /// </summary>
+    private static bool NameCoversHost(string name, string host)
+    {
+        if (name.Equals(host, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (!name.StartsWith("*.", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        string suffix = name[1..];
+        if (!host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        string label = host[..^suffix.Length];
+        return label.Length > 0 && !label.Contains('.');
+    }
+
+    private static APIResultModel EnsureCertificateIsInBindingStores(
         List<BindingTarget> targets,
         string thumbprint
     )
@@ -293,42 +381,142 @@ public class WindowsSystemInfoService : ISystemInfoService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
         )
         {
-            if (!IsCertificateInStore(storeName, thumbprint))
+            string? error = EnsureCertificateInBindingStore(storeName, thumbprint);
+            if (error != null)
             {
-                return new(
-                    false,
-                    $"Certificate {thumbprint} was not found in LocalMachine\\{storeName}, which is the store "
-                        + "the IIS binding(s) read from. Make sure the certificate is created with --LocalStore"
-                );
+                return new(false, error);
             }
         }
         return new(true, "");
     }
 
-    private static bool IsCertificateInStore(string storeName, string thumbprint)
+    /// <summary>
+    /// Makes the certificate readable from the store an IIS binding reads from, returning
+    /// null on success and the reason otherwise. This client only ever installs into
+    /// LocalMachine\MY, so a binding on another store (a WebHosting binding, typically)
+    /// gets a copy of the certificate rather than being refused. The binding keeps its own
+    /// store name, which is what IIS Manager does when a certificate is picked by hand.
+    /// </summary>
+    private static string? EnsureCertificateInBindingStore(string storeName, string thumbprint)
+    {
+        StoreLookup bindingStore = FindInStore(storeName, thumbprint);
+        if (bindingStore.Failed)
+        {
+            return bindingStore.Error;
+        }
+        if (bindingStore.Certificate != null)
+        {
+            bindingStore.Certificate.Dispose();
+            return null;
+        }
+        if (storeName.Equals(DefaultCertificateStoreName, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"certificate {thumbprint} is not in LocalMachine\\{storeName}, which is the store "
+                + "the binding reads from. Issue it with --LocalStore";
+        }
+        StoreLookup source = FindInStore(DefaultCertificateStoreName, thumbprint);
+        if (source.Failed)
+        {
+            return source.Error;
+        }
+        if (source.Certificate == null)
+        {
+            return $"certificate {thumbprint} is in neither LocalMachine\\{storeName}, which is the "
+                + $"store the binding reads from, nor LocalMachine\\{DefaultCertificateStoreName}. "
+                + "Issue it with --LocalStore";
+        }
+        using X509Certificate2 certificate = source.Certificate;
+        try
+        {
+            using X509Store store = new(storeName, StoreLocation.LocalMachine);
+            store.Open(OpenFlags.ReadWrite);
+            store.Add(certificate);
+            return null;
+        }
+        catch (Exception ex) when (IsStoreAccessFailure(ex))
+        {
+            return $"certificate {thumbprint} could not be copied from LocalMachine\\"
+                + $"{DefaultCertificateStoreName} into LocalMachine\\{storeName}, which is the store "
+                + $"the binding reads from: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// A store that cannot be read is not the same thing as a store that does not hold the
+    /// certificate, and the two call for different advice, so they are kept apart.
+    /// </summary>
+    private static StoreLookup FindInStore(string storeName, string thumbprint)
     {
         try
         {
             using X509Store store = new(storeName, StoreLocation.LocalMachine);
             store.Open(OpenFlags.ReadOnly);
-            return store.Certificates.Any(certificate =>
-                NormalizeThumbprint(certificate.Thumbprint) == thumbprint
+            return new(
+                store.Certificates.FirstOrDefault(certificate =>
+                    NormalizeThumbprint(certificate.Thumbprint) == thumbprint
+                ),
+                null
             );
         }
-        catch
+        catch (Exception ex) when (IsStoreAccessFailure(ex))
         {
-            return false;
+            return new(
+                null,
+                $"LocalMachine\\{storeName} could not be read, so whether it holds certificate "
+                    + $"{thumbprint} is unknown: {ex.Message}. This client has to run elevated"
+            );
         }
     }
 
+    private static bool IsStoreAccessFailure(Exception ex) =>
+        ex
+            is CryptographicException
+                or SecurityException
+                or UnauthorizedAccessException
+                or IOException;
+
     private static string NoBindingMessage(
         string? siteName,
-        List<string> centralCertStoreBindings
-    ) =>
-        centralCertStoreBindings.Count > 0
+        List<string> certificateNames,
+        List<string> centralCertStoreBindings,
+        List<string> foreignNameBindings
+    )
+    {
+        if (foreignNameBindings.Count > 0)
+        {
+            return $"The https binding(s) of IIS site '{siteName}' serve names this certificate does "
+                + $"not cover: {string.Join(", ", foreignNameBindings)}. The certificate covers "
+                + $"{DescribeNames(certificateNames)}";
+        }
+        return centralCertStoreBindings.Count > 0
             ? $"The IIS site '{siteName}' only has https bindings that use the Central Certificate Store, "
                 + "those are managed by the store itself and cannot be bound to a thumbprint"
             : $"The IIS site '{siteName}' does not have any https bindings";
+    }
+
+    private static string DescribeNames(List<string> certificateNames) =>
+        certificateNames.Count == 0 ? "no DNS names" : string.Join(", ", certificateNames);
+
+    private static string DescribeSkipped(
+        List<string> centralCertStoreBindings,
+        List<string> foreignNameBindings
+    )
+    {
+        List<string> skipped = [];
+        if (foreignNameBindings.Count > 0)
+        {
+            skipped.Add(
+                $"{string.Join(", ", foreignNameBindings)} because the certificate does not cover those names"
+            );
+        }
+        if (centralCertStoreBindings.Count > 0)
+        {
+            skipped.Add(
+                $"{string.Join(", ", centralCertStoreBindings)} because they use the IIS Central Certificate Store"
+            );
+        }
+        return skipped.Count > 0 ? $". Skipped {string.Join("; ", skipped)}" : string.Empty;
+    }
 
     private static string DescribeAvailableBindings(ServerManager manager)
     {
@@ -352,5 +540,10 @@ public class WindowsSystemInfoService : ISystemInfoService
         (thumbprint ?? string.Empty).Replace(" ", string.Empty).Trim().ToUpperInvariant();
 
     private readonly record struct BindingTarget(Site Site, Binding Binding);
+
+    private readonly record struct StoreLookup(X509Certificate2? Certificate, string? Error)
+    {
+        public bool Failed => Error != null;
+    }
 }
 #endif
