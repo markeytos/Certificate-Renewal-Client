@@ -20,6 +20,33 @@ public static class CertUtils
         return RandomNumberGenerator.GetString(alphanumericCharacters, 30);
     }
 
+    /// <summary>
+    /// Smallest RSA key this client is willing to create.
+    /// </summary>
+    public const int MinimumRsaKeyLength = 2048;
+
+    /// <summary>
+    /// RSA key length used when the key of the certificate being renewed cannot be reused.
+    /// </summary>
+    public const int DefaultRsaKeyLength = 4096;
+
+    /// <summary>
+    /// Returns the RSA key length to reuse when renewing <paramref name="cert"/>, or null when its
+    /// key cannot be reused because it is not RSA or is weaker than <see cref="MinimumRsaKeyLength"/>.
+    /// </summary>
+    public static int? GetReusableRsaKeyLength(X509Certificate2 cert)
+    {
+        ArgumentNullException.ThrowIfNull(cert);
+
+        using RSA? rsa = cert.GetRSAPublicKey();
+        if (rsa == null || rsa.KeySize < MinimumRsaKeyLength)
+        {
+            return null;
+        }
+
+        return rsa.KeySize;
+    }
+
     public static int GetKeyLength(X509Certificate2 cert)
     {
         ArgumentNullException.ThrowIfNull(cert);

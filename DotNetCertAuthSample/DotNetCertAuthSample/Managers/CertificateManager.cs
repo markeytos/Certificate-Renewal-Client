@@ -380,7 +380,7 @@ public class CertificateManager(
             }
         }
 
-        int keyLength = keyLengthOverride ?? CertUtils.GetKeyLength(cert);
+        int keyLength = keyLengthOverride ?? GetReusableKeyLength(cert);
         HashAlgorithmName hashAlgorithm = CertUtils.GetHashAlgorithm(cert);
         LogInformation(
             $"Creating CSR for certificate with a {keyLength} bit key and {hashAlgorithm.Name}"
@@ -399,6 +399,28 @@ public class CertificateManager(
             makePrivateKeyExportable,
             hashAlgorithm
         );
+    }
+
+    /// <summary>
+    /// Key length to request when renewing <paramref name="cert"/> without an explicit --KeyLength.
+    /// Only an RSA key of at least <see cref="CertUtils.MinimumRsaKeyLength"/> bits can be reused:
+    /// CSRs are always created with an RSA key, so reusing the size of an EC key (256, 384, 521)
+    /// would ask for an unusably weak RSA key, and reusing a legacy RSA size would downgrade the
+    /// certificate.
+    /// </summary>
+    private int GetReusableKeyLength(X509Certificate2 cert)
+    {
+        int? reusableKeyLength = CertUtils.GetReusableRsaKeyLength(cert);
+        if (reusableKeyLength.HasValue)
+        {
+            return reusableKeyLength.Value;
+        }
+
+        LogWarning(
+            $"The certificate being renewed does not have an RSA key of at least {CertUtils.MinimumRsaKeyLength} bits, "
+                + $"requesting a new {CertUtils.DefaultRsaKeyLength} bit RSA key instead"
+        );
+        return CertUtils.DefaultRsaKeyLength;
     }
 
     private bool ShouldMakePrivateKeyExportable(string? path)

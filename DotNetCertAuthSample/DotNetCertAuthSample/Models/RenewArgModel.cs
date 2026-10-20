@@ -69,7 +69,7 @@ public class RenewArgModel
         'k',
         "KeyLength",
         Required = false,
-        HelpText = "Certificate Key Length. If not specified, the key length of the certificate being renewed is used."
+        HelpText = "Certificate Key Length. If not specified, the key length of the certificate being renewed is reused when it is an RSA key of at least 2048 bits, otherwise a 4096 bit key is used."
     )]
     public int? KeyLength { get; set; }
 

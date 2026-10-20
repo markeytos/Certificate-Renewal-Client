@@ -116,7 +116,14 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
             );
         }
 
-        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)_keyPair.Private;
+        if (_keyPair.Private is not RsaPrivateCrtKeyParameters rsaParams)
+        {
+            throw new InvalidOperationException(
+                "Only RSA private keys can be attached to a certificate, "
+                    + $"but the key pair created for this request is {_keyPair.Private.GetType().Name}"
+            );
+        }
+
         RSA rsa = ConvertToDotnetRSA(rsaParams);
         return certificate.CopyWithPrivateKey(rsa);
     }

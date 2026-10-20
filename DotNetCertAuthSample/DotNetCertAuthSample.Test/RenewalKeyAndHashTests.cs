@@ -145,4 +145,63 @@ public class RenewalKeyAndHashTests
         Assert.True(csr.Verify());
         Assert.Equal(2048, ((RsaKeyParameters)csr.GetPublicKey()).Modulus.BitLength);
     }
+
+    [Theory]
+    [InlineData(2048)]
+    [InlineData(3072)]
+    [InlineData(4096)]
+    public void GetReusableRsaKeyLength_Reuses_Strong_Rsa_Keys(int keyLength)
+    {
+        using X509Certificate2 cert = CreateRsaCert(keyLength, HashAlgorithmName.SHA256);
+        Assert.Equal(keyLength, CertUtils.GetReusableRsaKeyLength(cert));
+    }
+
+    [Fact]
+    public void GetReusableRsaKeyLength_Rejects_Weak_Rsa_Keys()
+    {
+        using X509Certificate2 cert = CreateRsaCert(1024, HashAlgorithmName.SHA256);
+        Assert.Null(CertUtils.GetReusableRsaKeyLength(cert));
+    }
+
+    [Fact]
+    public void GetReusableRsaKeyLength_Rejects_Ecdsa_Keys()
+    {
+        // An EC key size is not an RSA key size: reusing 256 or 384 here would either fail to
+        // create a key or quietly request a breakable RSA key
+        using X509Certificate2 p256 = CreateEcdsaCert(
+            ECCurve.NamedCurves.nistP256,
+            HashAlgorithmName.SHA256
+        );
+        using X509Certificate2 p384 = CreateEcdsaCert(
+            ECCurve.NamedCurves.nistP384,
+            HashAlgorithmName.SHA384
+        );
+        Assert.Null(CertUtils.GetReusableRsaKeyLength(p256));
+        Assert.Null(CertUtils.GetReusableRsaKeyLength(p384));
+    }
+
+    [Fact]
+    public void AddPrivateKeyToCertificate_Reports_Unsupported_Key_Type()
+    {
+        UnifiedCertStoreService certStoreService = new(new UnifiedStoreService());
+        certStoreService.CreateCSR(
+            "CN=renewal-test",
+            ["renewal-test"],
+            256,
+            false,
+            [],
+            string.Empty,
+            null,
+            false,
+            HashAlgorithmName.SHA256
+        );
+        using X509Certificate2 issued = CreateEcdsaCert(
+            ECCurve.NamedCurves.nistP256,
+            HashAlgorithmName.SHA256
+        );
+
+        Assert.Throws<InvalidOperationException>(() =>
+            certStoreService.AddPrivateKeyToCertificate(issued, false)
+        );
+    }
 }
