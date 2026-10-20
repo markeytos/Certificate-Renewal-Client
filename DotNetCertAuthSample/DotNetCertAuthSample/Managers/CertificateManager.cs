@@ -228,33 +228,14 @@ public class CertificateManager(
     {
         try
         {
-            X509KeyUsageFlags? keyUsages = null;
-            foreach (X509Extension ext in cert.Extensions)
-            {
-                if (ext is X509KeyUsageExtension keyUsage)
-                {
-                    keyUsages = keyUsage.KeyUsages;
-                    break;
-                }
-            }
             LogInformation(
                 $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
             );
-            LogInformation("Creating CSR for certificate");
-            bool makePrivateKeyExportable = false;
-            // Extract key usages from the existing certificate
-            string csr = certStoreService.CreateCSR(
-                cert.SubjectName.Name,
-                GetSubjectAlternativeNames(cert)
-                    .Where(i => i.Type == SANTypes.DNSName)
-                    .Select(i => i.Value)
-                    .ToList(),
-                CertUtils.GetKeyLength(cert),
+            string csr = CreateRenewalCSR(
+                cert,
                 values.LocalCertStore,
-                [],
                 string.Empty,
-                keyUsages,
-                makePrivateKeyExportable
+                makePrivateKeyExportable: false
             );
             LogInformation("Renewing certificate");
             EZCAClientClass ezcaClient = new(_httpClient, _logger, values.url);
@@ -334,37 +315,16 @@ public class CertificateManager(
             LogInformation(
                 $"Renewing certificate for {(string.IsNullOrWhiteSpace(values.Domain) ? cert.Subject : values.Domain)}"
             );
-            X509KeyUsageFlags? keyUsages = null;
-            foreach (X509Extension ext in cert.Extensions)
-            {
-                if (ext is X509KeyUsageExtension keyUsage)
-                {
-                    keyUsages = keyUsage.KeyUsages;
-                    break;
-                }
-            }
-
             LogInformation(
                 $"Found certificate with thumbprint {cert.Thumbprint} and subject {cert.Subject} expiring on {cert.NotAfter}"
             );
 
-            LogInformation($"Creating CSR for certificate");
-
-            bool makePrivateKeyExportable = ShouldMakePrivateKeyExportable(values.Path);
-
-            // Extract key usages from the existing certificate
-            string csr = certStoreService.CreateCSR(
-                cert.SubjectName.Name,
-                GetSubjectAlternativeNames(cert)
-                    .Where(i => i.Type == SANTypes.DNSName)
-                    .Select(i => i.Value)
-                    .ToList(),
-                values.KeyLength,
+            string csr = CreateRenewalCSR(
+                cert,
                 values.LocalCertStore,
-                [],
                 values.KeyProvider,
-                keyUsages,
-                makePrivateKeyExportable
+                ShouldMakePrivateKeyExportable(values.Path),
+                values.KeyLength
             );
             LogInformation($"Renewing certificate");
             EZCAClientClass ezcaClient = new(_httpClient, _logger, values.url);
@@ -400,6 +360,67 @@ public class CertificateManager(
         }
 
         return 0;
+    }
+
+    private string CreateRenewalCSR(
+        X509Certificate2 cert,
+        bool localStore,
+        string keyProvider,
+        bool makePrivateKeyExportable,
+        int? keyLengthOverride = null
+    )
+    {
+        X509KeyUsageFlags? keyUsages = null;
+        foreach (X509Extension ext in cert.Extensions)
+        {
+            if (ext is X509KeyUsageExtension keyUsage)
+            {
+                keyUsages = keyUsage.KeyUsages;
+                break;
+            }
+        }
+
+        int keyLength = keyLengthOverride ?? GetReusableKeyLength(cert);
+        HashAlgorithmName hashAlgorithm = CertUtils.GetHashAlgorithm(cert);
+        LogInformation(
+            $"Creating CSR for certificate with a {keyLength} bit key and {hashAlgorithm.Name}"
+        );
+        return certStoreService.CreateCSR(
+            cert.SubjectName.Name,
+            GetSubjectAlternativeNames(cert)
+                .Where(i => i.Type == SANTypes.DNSName)
+                .Select(i => i.Value)
+                .ToList(),
+            keyLength,
+            localStore,
+            [],
+            keyProvider,
+            keyUsages,
+            makePrivateKeyExportable,
+            hashAlgorithm
+        );
+    }
+
+    /// <summary>
+    /// Key length to request when renewing <paramref name="cert"/> without an explicit --KeyLength.
+    /// Only an RSA key of at least <see cref="CertUtils.MinimumRsaKeyLength"/> bits can be reused:
+    /// CSRs are always created with an RSA key, so reusing the size of an EC key (256, 384, 521)
+    /// would ask for an unusably weak RSA key, and reusing a legacy RSA size would downgrade the
+    /// certificate.
+    /// </summary>
+    private int GetReusableKeyLength(X509Certificate2 cert)
+    {
+        int? reusableKeyLength = CertUtils.GetReusableRsaKeyLength(cert);
+        if (reusableKeyLength.HasValue)
+        {
+            return reusableKeyLength.Value;
+        }
+
+        LogWarning(
+            $"The certificate being renewed does not have an RSA key of at least {CertUtils.MinimumRsaKeyLength} bits, "
+                + $"requesting a new {CertUtils.DefaultRsaKeyLength} bit RSA key instead"
+        );
+        return CertUtils.DefaultRsaKeyLength;
     }
 
     private bool ShouldMakePrivateKeyExportable(string? path)
@@ -622,7 +643,7 @@ public class CertificateManager(
             );
         }
 
-        if (values.KeyLength != 2048 && values.KeyLength != 4096)
+        if (values.KeyLength.HasValue && values.KeyLength != 2048 && values.KeyLength != 4096)
         {
             throw new ArgumentException("Key length must be 2048 or 4096");
         }
