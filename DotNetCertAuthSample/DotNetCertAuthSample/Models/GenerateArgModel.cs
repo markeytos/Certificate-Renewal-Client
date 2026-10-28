@@ -14,6 +14,13 @@ public class GenerateArgModel
     )]
     public bool RDPCert { get; set; }
 
+    [Option(
+        "IISSite",
+        Required = false,
+        HelpText = "Name of the IIS site whose https bindings this certificate should be bound to. Requires --LocalStore. If omitted, IIS is left alone"
+    )]
+    public string? IISSite { get; set; }
+
     [Option('d', "Domain", HelpText = "Domain for the certificate you want to create")]
     public string? Domain { get; set; }
 
