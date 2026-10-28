@@ -14,7 +14,8 @@ public interface ICertStoreService
         List<string> ekus,
         string keyProvider = "",
         X509KeyUsageFlags? keyUsageFlags = null,
-        bool makePrivateKeyExportable = false
+        bool makePrivateKeyExportable = false,
+        HashAlgorithmName? hashAlgorithm = null
     );
 
     RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters rsaParams);

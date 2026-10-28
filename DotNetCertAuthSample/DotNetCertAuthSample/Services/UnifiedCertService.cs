@@ -27,14 +27,15 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         List<string> ekus,
         string keyProvider = "",
         X509KeyUsageFlags? keyUsage = null,
-        bool makePrivateKeyExportable = false
+        bool makePrivateKeyExportable = false,
+        HashAlgorithmName? hashAlgorithm = null
     )
     {
         AsymmetricCipherKeyPair keyPair = GenerateKeyPair(keylength);
         X509Name x509Name = new(subjectName);
         X509KeyUsage usage = ConvertDotnetKeyUsagesToBouncy(keyUsage);
         Pkcs10CertificationRequest pkcs10 = new(
-            "SHA256WITHRSA",
+            GetSignatureAlgorithm(keyPair, hashAlgorithm),
             x509Name,
             keyPair.Public,
             CreateAttributes(sans, ekus, usage),
@@ -115,7 +116,14 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
             );
         }
 
-        RsaPrivateCrtKeyParameters rsaParams = (RsaPrivateCrtKeyParameters)_keyPair.Private;
+        if (_keyPair.Private is not RsaPrivateCrtKeyParameters rsaParams)
+        {
+            throw new InvalidOperationException(
+                "Only RSA private keys can be attached to a certificate, "
+                    + $"but the key pair created for this request is {_keyPair.Private.GetType().Name}"
+            );
+        }
+
         RSA rsa = ConvertToDotnetRSA(rsaParams);
         return certificate.CopyWithPrivateKey(rsa);
     }
@@ -130,6 +138,16 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         }
 
         return csrPemBuilder.ToString();
+    }
+
+    private static string GetSignatureAlgorithm(
+        AsymmetricCipherKeyPair keyPair,
+        HashAlgorithmName? hashAlgorithm
+    )
+    {
+        string hash = (hashAlgorithm ?? HashAlgorithmName.SHA256).Name ?? "SHA256";
+        string keyAlgorithm = keyPair.Public is ECPublicKeyParameters ? "ECDSA" : "RSA";
+        return $"{hash}WITH{keyAlgorithm}";
     }
 
     private static AsymmetricCipherKeyPair GenerateKeyPair(int keyLength)
