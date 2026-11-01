@@ -3,6 +3,8 @@ using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CERTENROLLLib;
+using DotNetCertAuthSample.Models;
+using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using X509KeyUsageFlags = System.Security.Cryptography.X509Certificates.X509KeyUsageFlags;
@@ -15,6 +17,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
 {
     private CX509CertificateRequestPkcs10? _certRequest;
     private CX509Enrollment? _objEnroll;
+    private bool _responseInstalled;
 
     public string CreateCSR(
         string subjectName,
@@ -22,10 +25,11 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         int keylength,
         bool localStore,
         List<string> ekus,
-        string KeyProvider = "Microsoft Enhanced Cryptographic Provider v1.0",
+        string KeyProvider = KeyProviders.LegacyCsp,
         X509KeyUsageFlags? keyUsageFlags = null,
         bool makePrivateKeyExportable = false,
-        HashAlgorithmName? hashAlgorithm = null
+        HashAlgorithmName? hashAlgorithm = null,
+        string? challengePassword = null
     )
     {
         CX509CertificateRequestPkcs10 certRequest = new();
@@ -51,6 +55,11 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         certRequest.PrivateKey.MachineContext = localStore;
         certRequest.PrivateKey.ProviderName = KeyProvider;
         certRequest.PrivateKey.Create();
+        // Tracked from here rather than after Encode(): the key container exists now, so a failure
+        // anywhere in the rest of this method would otherwise orphan it beyond reach of
+        // DiscardPendingRequest.
+        _certRequest = certRequest;
+        _responseInstalled = false;
         CObjectId hashAlgorithmId = new();
         hashAlgorithmId.InitializeFromAlgorithmName(
             ObjectIdGroupId.XCN_CRYPT_HASH_ALG_OID_GROUP_ID,
@@ -89,14 +98,62 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
             certRequest.X509Extensions.Add((CX509Extension)x509ExtensionEnhancedKeyUsage);
         }
 
+        if (!string.IsNullOrWhiteSpace(challengePassword))
+        {
+            // SCEP carries its shared secret as a signed attribute of the request itself, so the
+            // key that signs the request is the one the challenge is bound to. CertEnroll only
+            // exposes the attribute on the V3 interface of the request.
+            ((IX509CertificateRequestPkcs10V3)certRequest).ChallengePassword = challengePassword;
+        }
+
         certRequest.Encode();
-        _certRequest = certRequest;
         return certRequest.RawData[EncodingType.XCN_CRYPT_STRING_BASE64REQUESTHEADER];
     }
 
     public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
         return CertUtils.GetCACertificates(caSki, localStore);
+    }
+
+    public void DiscardPendingRequest()
+    {
+        if (_certRequest == null || _responseInstalled)
+        {
+            // Once a response is installed the key belongs to that certificate. Deleting it here
+            // would leave the machine holding a certificate whose key is gone, which no later run
+            // can detect or repair.
+            return;
+        }
+
+        try
+        {
+            // The key container is created when the request is built, not when the response is
+            // installed, so an unanswered request owns one until it is deleted here.
+            _certRequest.PrivateKey?.Delete();
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A key that was never created, or was already deleted, is the state we wanted.
+        }
+        finally
+        {
+            _certRequest = null;
+            _objEnroll = null;
+        }
+    }
+
+    public X509Certificate2? GetCertificateByThumbprint(
+        string thumbprint,
+        bool localStore,
+        string? password = null
+    )
+    {
+        return CertUtils.FindCertificateByThumbprint(
+            storeService,
+            thumbprint,
+            localStore,
+            password
+        );
     }
 
     public void InstallCertificate(X509Certificate2 cert, bool localStore, string? password = null)
@@ -118,6 +175,7 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
             null
         );
         _objEnroll = objEnroll;
+        _responseInstalled = true;
     }
 
     public void InstallCertificateWithPrivateKey(
@@ -189,14 +247,62 @@ public class WindowsCertService(IStoreService storeService) : ICertStoreService
         CAlternativeNames objAlternativeNames = new();
         CX509ExtensionAlternativeNames objExtensionAlternativeNames = new();
 
-        foreach (string sanSTR in sans)
+        foreach (SubjectAlternativeNameEntry entry in SubjectAlternativeNameParser.ParseEntries(sans))
         {
-            CAlternativeName san = new();
-            san.InitializeFromString(AlternativeNameType.XCN_CERT_ALT_NAME_DNS_NAME, sanSTR);
-            objAlternativeNames.Add(san);
+            objAlternativeNames.Add(CreateSan(entry));
         }
         objExtensionAlternativeNames.InitializeEncode(objAlternativeNames);
         return objExtensionAlternativeNames;
+    }
+
+    private static CAlternativeName CreateSan(SubjectAlternativeNameEntry entry)
+    {
+        CAlternativeName san = new();
+        switch (entry.Type)
+        {
+            case SANTypes.DNSName:
+                san.InitializeFromString(
+                    AlternativeNameType.XCN_CERT_ALT_NAME_DNS_NAME,
+                    entry.Value
+                );
+                return san;
+            case SANTypes.Rfc822Name:
+                san.InitializeFromString(
+                    AlternativeNameType.XCN_CERT_ALT_NAME_RFC822_NAME,
+                    entry.Value
+                );
+                return san;
+            case SANTypes.URI:
+                san.InitializeFromString(AlternativeNameType.XCN_CERT_ALT_NAME_URL, entry.Value);
+                return san;
+            case SANTypes.IPAddress:
+                san.InitializeFromRawData(
+                    AlternativeNameType.XCN_CERT_ALT_NAME_IP_ADDRESS,
+                    EncodingType.XCN_CRYPT_STRING_BASE64,
+                    Convert.ToBase64String(entry.IPAddressOctets ?? [])
+                );
+                return san;
+            case SANTypes.OtherName:
+                CObjectId otherNameOid = new();
+                otherNameOid.InitializeFromValue(
+                    entry.OtherNameOid ?? SubjectAlternativeNameParser.UpnOid
+                );
+                // ToBeWrapped must be false: CertEnroll adds the [0] EXPLICIT tag either way, and
+                // true makes it wrap the value in an OCTET STRING as well, which produces a
+                // double-wrapped otherName that Windows cannot read a UPN out of. So it is given
+                // the finished DER of the value and wraps nothing.
+                san.InitializeFromOtherName(
+                    otherNameOid,
+                    EncodingType.XCN_CRYPT_STRING_BASE64,
+                    Convert.ToBase64String(new DerUtf8String(entry.Value).GetDerEncoded()),
+                    false
+                );
+                return san;
+            default:
+                throw new ArgumentException(
+                    $"'{entry.Type}' is not a supported Subject Alternative Name type."
+                );
+        }
     }
 
     public static CERTENROLLLib.X509KeyUsageFlags? GetKeyUsages(X509Certificate2 certificate)
