@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Installs the certificate client and the scheduled task that keeps this machine's device
+  certificate current.
+
+  Deploy it per machine through Group Policy software installation, so that workstations stop
+  downloading an executable from github.com at every boot the way the script based setup did.
+
+  Silent install, with the enrollment URL:
+
+    msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<sub>/<ca>"
+
+  ENROLLURL is a URL, not a secret, which is the point of this whole enrollment path: unlike the
+  static SCEP password it replaces, nothing here is worth reading out of SYSVOL.
+-->
+<?if $(sys.BUILDARCH) = arm64 ?>
+<?define UtilCustomActionBinary = "Wix4UtilCA_A64" ?>
+<?else?>
+<?define UtilCustomActionBinary = "Wix4UtilCA_X64" ?>
+<?endif?>
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+    Name="Keytos EZCA Certificate Manager"
+    Manufacturer="Keytos Security"
+    Version="$(var.Version)"
+    UpgradeCode="7D0D7E2E-6F2A-4E64-9E4E-9E2C0A2D6B41"
+    Scope="perMachine"
+    Compressed="yes">
+
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Launch
+      Condition="Installed OR VersionNT &gt;= 603"
+      Message="[ProductName] requires Windows 8.1 or later." />
+
+    <Property Id="ENROLLURL" Secure="yes" />
+
+    <!--
+      The install location is fixed rather than configurable: the scheduled task definition has to
+      name the executable by path, and a task XML is not formatted by Windows Installer.
+    -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="KeytosFolder" Name="Keytos">
+        <Directory Id="INSTALLFOLDER" Name="EZCACertManager" />
+      </Directory>
+    </StandardDirectory>
+
+    <!--
+      The configuration directory is created by the installer with an explicit ACL rather than
+      being left to the client. %ProgramData% lets any user create a folder and own what they
+      create, so a user who got there first would own the file the SYSTEM task reads its
+      enrollment URL from.
+    -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="KEYTOSDATAFOLDER" Name="Keytos">
+        <Directory Id="CONFIGFOLDER" Name="EZCACertManager" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ConfigurationComponents">
+      <!--
+        The parent is protected as well as the folder itself. Owning the parent is enough to
+        rename the protected folder away and put an attacker-controlled one in its place, so
+        locking only the child would leave the same hole open one level up.
+      -->
+      <Component Id="KeytosDataFolderPermissions" Directory="KEYTOSDATAFOLDER" Guid="1B6E9C40-7A53-4D2F-9F88-3C4A5E2D7B19">
+        <CreateFolder>
+          <util:PermissionEx User="SYSTEM" GenericAll="yes" />
+          <util:PermissionEx User="Administrators" GenericAll="yes" />
+          <util:PermissionEx User="Users" GenericRead="yes" GenericExecute="yes" />
+        </CreateFolder>
+        <RegistryValue
+          Root="HKLM"
+          Key="SOFTWARE\Keytos\EZCACertManager"
+          Name="DataFolder"
+          Type="string"
+          Value="[KEYTOSDATAFOLDER]"
+          KeyPath="yes" />
+      </Component>
+      <Component Id="ConfigurationFolder" Directory="CONFIGFOLDER" Guid="9F1C5A77-61F8-4E1D-8A22-0B5D7C9E4A31">
+        <CreateFolder>
+          <util:PermissionEx User="SYSTEM" GenericAll="yes" />
+          <util:PermissionEx User="Administrators" GenericAll="yes" />
+          <util:PermissionEx User="Users" GenericRead="yes" GenericExecute="yes" />
+        </CreateFolder>
+        <!--
+          enrollment.json is deliberately NOT removed. RemoveExistingProducts runs the old
+          product's uninstall before the new files land, and a Group Policy upgrade passes no
+          ENROLLURL to recreate the file, so deleting it on uninstall would also delete it on
+          every upgrade and leave the scheduled task with no URL — renewal would stop silently
+          until the certificate expired. RemoveFile cannot be conditioned, so the file is left
+          for an administrator to remove.
+        -->
+        <RegistryValue
+          Root="HKLM"
+          Key="SOFTWARE\Keytos\EZCACertManager"
+          Name="ConfigurationFolder"
+          Type="string"
+          Value="[CONFIGFOLDER]"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="ClientExecutable" Guid="C2B0A5B6-6E67-4F63-9A2B-1D4D3F1B8E22">
+        <File Id="EZCACertManagerExe" Source="$(var.ClientExe)" KeyPath="yes" />
+      </Component>
+      <Component Id="EnrollmentTaskDefinition" Guid="4E4B6E0B-2D64-4F8E-9C1A-6D5B9D0C2A77">
+        <File Id="EnrollmentTaskXml" Source="$(var.TaskXml)" Name="EnrollmentTask.xml" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="Keytos EZCA Certificate Manager" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="ConfigurationComponents" />
+    </Feature>
+
+    <!--
+      Registering the task from its XML rather than with schtasks switches, because the switches
+      cannot express both a boot trigger and a daily trigger on one task.
+    -->
+    <SetProperty
+      Id="RegisterEnrollmentTask"
+      Before="RegisterEnrollmentTask"
+      Sequence="execute"
+      Value="&quot;[System64Folder]schtasks.exe&quot; /Create /TN &quot;Keytos\EZCA Device Enrollment&quot; /XML &quot;[INSTALLFOLDER]EnrollmentTask.xml&quot; /F" />
+    <CustomAction
+      Id="RegisterEnrollmentTask"
+      BinaryRef="$(var.UtilCustomActionBinary)"
+      DllEntry="WixQuietExec64"
+      Execute="deferred"
+      Impersonate="no"
+      Return="check" />
+
+    <SetProperty
+      Id="SaveEnrollmentConfiguration"
+      Before="SaveEnrollmentConfiguration"
+      Sequence="execute"
+      Value="&quot;[INSTALLFOLDER]EZCACertManager.exe&quot; enroll --Url &quot;[ENROLLURL]&quot; --SaveConfig" />
+    <CustomAction
+      Id="SaveEnrollmentConfiguration"
+      BinaryRef="$(var.UtilCustomActionBinary)"
+      DllEntry="WixQuietExec64"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <!--
+      Rollback counterpart for the registration: without it a failed install removes the
+      executable but leaves the task behind, firing at every boot against a path that no longer
+      exists and owned by no component.
+    -->
+    <SetProperty
+      Id="RollbackEnrollmentTask"
+      Before="RollbackEnrollmentTask"
+      Sequence="execute"
+      Value="&quot;[System64Folder]schtasks.exe&quot; /Delete /TN &quot;Keytos\EZCA Device Enrollment&quot; /F" />
+    <CustomAction
+      Id="RollbackEnrollmentTask"
+      BinaryRef="$(var.UtilCustomActionBinary)"
+      DllEntry="WixQuietExec64"
+      Execute="rollback"
+      Impersonate="no"
+      Return="ignore" />
+
+    <SetProperty
+      Id="RemoveEnrollmentTask"
+      Before="RemoveEnrollmentTask"
+      Sequence="execute"
+      Value="&quot;[System64Folder]schtasks.exe&quot; /Delete /TN &quot;Keytos\EZCA Device Enrollment&quot; /F" />
+    <CustomAction
+      Id="RemoveEnrollmentTask"
+      BinaryRef="$(var.UtilCustomActionBinary)"
+      DllEntry="WixQuietExec64"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <InstallExecuteSequence>
+      <!-- Scheduled before the action it undoes, as rollback actions must be. -->
+      <Custom Action="RollbackEnrollmentTask" After="InstallFiles" Condition="NOT REMOVE" />
+      <Custom
+        Action="RegisterEnrollmentTask"
+        After="RollbackEnrollmentTask"
+        Condition="NOT REMOVE" />
+      <!--
+        The first enrollment runs during the install so a machine is usable straight away, but it
+        is allowed to fail: the configuration file has already been written by then, so the
+        scheduled task retries on a machine that was offline while it was being set up.
+
+        It must run AFTER the util extension's deferred ACL write, which is scheduled near
+        InstallServices. CreateFolders makes the configuration directories with %ProgramData%'s
+        inherited permissions, which grant Users AppendData, and the client refuses to write into
+        a directory chain in that state. Scheduled any earlier, this action is handed directories
+        that are not yet protected and declines to write the URL at all — silently, since it
+        returns ignore. Before InstallFinalize puts it last in the deferred script.
+      -->
+      <Custom
+        Action="SaveEnrollmentConfiguration"
+        Before="InstallFinalize"
+        Condition="NOT REMOVE AND ENROLLURL" />
+      <Custom Action="RemoveEnrollmentTask" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
