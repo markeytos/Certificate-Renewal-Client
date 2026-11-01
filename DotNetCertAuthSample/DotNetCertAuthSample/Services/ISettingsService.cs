@@ -36,11 +36,22 @@ public class SettingsService : ISettingsService
     {
         string settingsFolder = "certClient";
         string path = CreateFilePath("certClientSettings.json", settingsFolder);
+        DateTime utcNow = DateTime.UtcNow;
         settings.RotatedCertificates = settings
-            .RotatedCertificates.Where(rc => rc.ExpiryDate > DateTime.UtcNow.AddDays(7))
+            .RotatedCertificates.Where(rc => ShouldKeepRotationRecord(rc.ExpiryDate, utcNow))
             .ToList();
         string settingsString = JsonSerializer.Serialize(settings);
         WriteToFile(path, settingsString, logger, settingsFolder);
+    }
+
+    /// <summary>
+    /// renewAll records the old certificate's thumbprint so the next run does not renew it again.
+    /// That certificate stays in the store, so the record has to outlive its expiry. Drop it a week
+    /// after it expires, once a daily run has had time to move on.
+    /// </summary>
+    internal static bool ShouldKeepRotationRecord(DateTime expiryDate, DateTime utcNow)
+    {
+        return expiryDate > utcNow.AddDays(-7);
     }
 
     private static void WriteToFile(string path, string content, ILogger? logger, string folder)
