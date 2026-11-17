@@ -7,14 +7,15 @@ using Xunit;
 namespace DotNetCertAuthSample.Test;
 
 /// <summary>
-/// The bytes both attestations sign. A server verifies a signature over exactly these, so the
+/// The bytes the device signs. EZCA verifies a signature over exactly these, so the
 /// layout is a wire format: these tests pin it down byte for byte rather than only checking that
 /// it changes when the inputs change.
 /// </summary>
 public class DeviceAttestationBindingTests
 {
     private static readonly Uri EnrollmentUrl = new(
-        "https://portal.ezca.io/api/enroll/device/abc"
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/"
+            + "22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333"
     );
 
     private static DeviceEnrollmentChallenge Challenge(
@@ -75,13 +76,13 @@ public class DeviceAttestationBindingTests
         DeviceEnrollmentChallenge challenge = Challenge();
 
         byte[] binding = DeviceAttestationBinding.Build(
-            "Negotiate",
+            "EntraDevice",
             EnrollmentUrl,
             challenge,
             csrDer
         );
 
-        Assert.Equal(Expected("Negotiate", EnrollmentUrl, challenge, csrDer), binding);
+        Assert.Equal(Expected("EntraDevice", EnrollmentUrl, challenge, csrDer), binding);
     }
 
     [Fact]
@@ -89,7 +90,7 @@ public class DeviceAttestationBindingTests
     {
         // The context string is the first field, so its length prefix is the first four bytes.
         byte[] binding = DeviceAttestationBinding.Build(
-            "Negotiate",
+            "EntraDevice",
             EnrollmentUrl,
             Challenge(),
             [1]
@@ -101,16 +102,65 @@ public class DeviceAttestationBindingTests
         Assert.Equal(0, binding[3]);
     }
 
-    [Fact]
-    public void The_Two_Attestation_Schemes_Produce_Different_Bytes()
+    // EZCA writes the URL it checks the signature against with a lower-case host, no default
+    // port and no trailing slash, and also tries it with one trailing slash. This pins the
+    // client's spelling to that literally, rather than through Uri.AbsoluteUri again.
+    [Theory]
+    [InlineData(
+        "HTTPS://Portal.EZCA.io:443/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333",
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333"
+    )]
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333/",
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333/"
+    )]
+    [InlineData(
+        "https://ezca.contoso.com:8443/pki/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333",
+        "https://ezca.contoso.com:8443/pki/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333"
+    )]
+    public void The_Url_Is_Signed_The_Way_EZCA_Spells_It(string configured, string signed)
     {
-        // Without this a MIC made for Kerberos would be a valid signature input for Entra.
+        byte[] binding = DeviceAttestationBinding.Build(
+            "EntraDevice",
+            new Uri(configured),
+            Challenge(),
+            [1]
+        );
+
+        Assert.Equal(signed, Encoding.UTF8.GetString(ReadField(binding, 2)));
+    }
+
+    // The fields are counted from zero: the context string is field 0.
+    private static byte[] ReadField(byte[] binding, int index)
+    {
+        int offset = 0;
+        for (int field = 0; ; field++)
+        {
+            int length =
+                binding[offset]
+                | (binding[offset + 1] << 8)
+                | (binding[offset + 2] << 16)
+                | (binding[offset + 3] << 24);
+            offset += 4;
+            if (field == index)
+            {
+                return binding[offset..(offset + length)];
+            }
+
+            offset += length;
+        }
+    }
+
+    [Fact]
+    public void The_Scheme_Is_Bound()
+    {
+        // So a signature made for this scheme can't be presented under another one.
         byte[] csrDer = [1, 2, 3];
         DeviceEnrollmentChallenge challenge = Challenge();
 
         Assert.NotEqual(
-            DeviceAttestationBinding.Build("Negotiate", EnrollmentUrl, challenge, csrDer),
-            DeviceAttestationBinding.Build("EntraDevice", EnrollmentUrl, challenge, csrDer)
+            DeviceAttestationBinding.Build("EntraDevice", EnrollmentUrl, challenge, csrDer),
+            DeviceAttestationBinding.Build("OtherScheme", EnrollmentUrl, challenge, csrDer)
         );
     }
 
@@ -121,10 +171,10 @@ public class DeviceAttestationBindingTests
         DeviceEnrollmentChallenge challenge = Challenge();
 
         Assert.NotEqual(
-            DeviceAttestationBinding.Build("Negotiate", EnrollmentUrl, challenge, csrDer),
+            DeviceAttestationBinding.Build("EntraDevice", EnrollmentUrl, challenge, csrDer),
             DeviceAttestationBinding.Build(
-                "Negotiate",
-                new Uri("https://evil.example.com/api/enroll/device/abc"),
+                "EntraDevice",
+                new Uri("https://evil.example.com/api/enroll/device/a/b/c"),
                 challenge,
                 csrDer
             )
@@ -140,13 +190,13 @@ public class DeviceAttestationBindingTests
 
         Assert.NotEqual(
             DeviceAttestationBinding.Build(
-                "Negotiate",
+                "EntraDevice",
                 EnrollmentUrl,
                 Challenge(challengeId: "AB", nonce: "AAEC"),
                 csrDer
             ),
             DeviceAttestationBinding.Build(
-                "Negotiate",
+                "EntraDevice",
                 EnrollmentUrl,
                 Challenge(challengeId: "A", nonce: "QgABAg=="),
                 csrDer
@@ -160,8 +210,8 @@ public class DeviceAttestationBindingTests
         DeviceEnrollmentChallenge challenge = Challenge();
 
         Assert.NotEqual(
-            DeviceAttestationBinding.Build("Negotiate", EnrollmentUrl, challenge, [1, 2, 3]),
-            DeviceAttestationBinding.Build("Negotiate", EnrollmentUrl, challenge, [1, 2, 4])
+            DeviceAttestationBinding.Build("EntraDevice", EnrollmentUrl, challenge, [1, 2, 3]),
+            DeviceAttestationBinding.Build("EntraDevice", EnrollmentUrl, challenge, [1, 2, 4])
         );
     }
 
@@ -174,7 +224,7 @@ public class DeviceAttestationBindingTests
     {
         Assert.Throws<ArgumentException>(() =>
             DeviceAttestationBinding.Build(
-                "Negotiate",
+                "EntraDevice",
                 EnrollmentUrl,
                 Challenge(challengeId, nonce),
                 [1]

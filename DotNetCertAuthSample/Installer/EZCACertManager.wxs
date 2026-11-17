@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Installs the certificate client and the scheduled task that keeps this machine's device
-  certificate current.
+  Installs the certificate client and the scheduled task that keeps this Entra joined or hybrid
+  joined device's certificate current. Domain joined machines don't need it: they enroll with
+  Windows autoenrollment.
 
-  Deploy it per machine through Group Policy software installation, so that workstations stop
-  downloading an executable from github.com at every boot the way the script based setup did.
+  Deploy it per device, for example as a line-of-business app through Intune.
 
-  Silent install, with the enrollment URL:
+  Silent install, with the enrollment URL the Keytos portal shows for the Entra profile:
 
-    msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<sub>/<ca>"
+    msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>"
 
-  ENROLLURL is a URL, not a secret, which is the point of this whole enrollment path: unlike the
-  static SCEP password it replaces, nothing here is worth reading out of SYSVOL.
+  ENROLLURL is a URL, not a secret, which is the point of this enrollment path: the device proves
+  who it is with its own Entra device registration, so nothing here needs protecting.
 -->
 <?if $(sys.BUILDARCH) = arm64 ?>
 <?define UtilCustomActionBinary = "Wix4UtilCA_A64" ?>

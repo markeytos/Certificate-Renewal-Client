@@ -9,8 +9,8 @@ namespace DotNetCertAuthSample.Test;
 
 /// <summary>
 /// Covers the failure modes a skeptic review found in the first cut of device enrollment: a
-/// subject that is not a distinguished name, an attestation that is not bound to its request, a
-/// challenge that carries no nonce, and a plaintext enrollment URL.
+/// subject that is not a distinguished name, a challenge URL built from the wrong segment, and the
+/// state the next run needs to find its certificate.
 /// </summary>
 public class SubjectDistinguishedNameTests
 {
@@ -86,97 +86,93 @@ public class SubjectDistinguishedNameTests
 
 public class ChallengeUrlTests
 {
+    private const string Ids =
+        "11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222";
+    private const string ProfileId = "33333333-3333-3333-3333-333333333333";
+
     [Fact]
-    public void The_Challenge_Segment_Is_Appended_To_The_Path()
+    public void The_Challenge_Replaces_The_Profile_Segment()
     {
+        // The challenge belongs to the CA, one level above the profile.
         Assert.Equal(
-            "https://portal.ezca.io/api/enroll/device/abc/challenge",
+            $"https://portal.ezca.io/api/enroll/device/{Ids}/challenge",
             DeviceEnrollmentClient
-                .BuildChallengeUrl(new Uri("https://portal.ezca.io/api/enroll/device/abc"))
-                .AbsoluteUri
-        );
-    }
-
-    [Fact]
-    public void A_Trailing_Slash_Does_Not_Double_Up()
-    {
-        Assert.Equal(
-            "https://portal.ezca.io/api/enroll/device/abc/challenge",
-            DeviceEnrollmentClient
-                .BuildChallengeUrl(new Uri("https://portal.ezca.io/api/enroll/device/abc/"))
-                .AbsoluteUri
-        );
-    }
-
-    [Fact]
-    public void A_Query_String_Stays_A_Query_String()
-    {
-        // String concatenation put the appended segment behind the query, producing a path of
-        // "/enroll?ca=x/challenge".
-        Uri challengeUrl = DeviceEnrollmentClient.BuildChallengeUrl(
-            new Uri("https://portal.ezca.io/api/enroll?ca=abc")
-        );
-
-        Assert.Equal("/api/enroll/challenge", challengeUrl.AbsolutePath);
-        Assert.Equal("?ca=abc", challengeUrl.Query);
-    }
-}
-
-public class KerberosChallengeRequirementTests
-{
-    [Fact]
-    public async Task Kerberos_Attestation_Refuses_To_Run_Without_A_Challenge()
-    {
-        // It declares RequiresChallenge, so accepting a missing nonce would silently drop the
-        // replay protection the binding exists for. Entra already refused this.
-        KerberosDeviceAttestor attestor = new(NullLogger.Instance);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            attestor.AttestAsync(
-                new Uri("https://portal.ezca.io/api/enroll/device/abc"),
-                [1, 2, 3],
-                challenge: null,
-                CancellationToken.None
-            )
-        );
-    }
-
-    [Fact]
-    public async Task Kerberos_Attestation_Refuses_An_Empty_Nonce()
-    {
-        KerberosDeviceAttestor attestor = new(NullLogger.Instance);
-        DeviceEnrollmentChallenge emptyChallenge = new() { ChallengeId = "abc", Nonce = "" };
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            attestor.AttestAsync(
-                new Uri("https://portal.ezca.io/api/enroll/device/abc"),
-                [1, 2, 3],
-                emptyChallenge,
-                CancellationToken.None
-            )
-        );
-    }
-
-    [Fact]
-    public async Task Both_Attestations_Refuse_A_Missing_Challenge_The_Same_Way()
-    {
-        foreach (
-            IDeviceAttestor attestor in new IDeviceAttestor[]
-            {
-                new KerberosDeviceAttestor(NullLogger.Instance),
-                new EntraDeviceAttestor(NullLogger.Instance),
-            }
-        )
-        {
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                attestor.AttestAsync(
-                    new Uri("https://portal.ezca.io/api/enroll/device/abc"),
-                    [1, 2, 3],
-                    challenge: null,
-                    CancellationToken.None
+                .BuildChallengeUrl(
+                    new Uri($"https://portal.ezca.io/api/enroll/device/{Ids}/{ProfileId}")
                 )
-            );
-        }
+                .AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public void A_Trailing_Slash_Does_Not_Change_It()
+    {
+        Assert.Equal(
+            $"https://portal.ezca.io/api/enroll/device/{Ids}/challenge",
+            DeviceEnrollmentClient
+                .BuildChallengeUrl(
+                    new Uri($"https://portal.ezca.io/api/enroll/device/{Ids}/{ProfileId}/")
+                )
+                .AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public void An_Address_With_A_Path_Keeps_It()
+    {
+        Assert.Equal(
+            $"https://ezca.contoso.com/pki/api/enroll/device/{Ids}/challenge",
+            DeviceEnrollmentClient
+                .BuildChallengeUrl(
+                    new Uri($"https://ezca.contoso.com/pki/api/enroll/device/{Ids}/{ProfileId}")
+                )
+                .AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public void Upper_Case_Ids_Are_Accepted()
+    {
+        Assert.True(
+            DeviceEnrollmentClient.IsProfileEnrollmentUrl(
+                new Uri(
+                    $"https://portal.ezca.io/api/enroll/device/{Ids.ToUpperInvariant()}/{ProfileId}"
+                )
+            )
+        );
+    }
+
+    [Theory]
+    [InlineData("https://portal.ezca.io/api/enroll/device/abc")]
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222"
+    )]
+    [InlineData("https://portal.ezca.io/")]
+    // The device signs the URL and EZCA checks it against the URL it handed out, which has none
+    // of these, so each would fail every enrollment.
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333?ref=portal"
+    )]
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333#top"
+    )]
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333//"
+    )]
+    [InlineData(
+        "https://portal.ezca.io/api//enroll/device/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333"
+    )]
+    [InlineData(
+        "https://portal.ezca.io/api/enroll/device/{11111111-1111-1111-1111-111111111111}/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333"
+    )]
+    public void A_Url_Without_The_Profile_Is_Refused(string enrollmentUrl)
+    {
+        // An enrollment URL from before profiles existed, or a CA's own URL, would otherwise send
+        // the challenge request somewhere it can't be answered.
+        Assert.False(DeviceEnrollmentClient.IsProfileEnrollmentUrl(new Uri(enrollmentUrl)));
+        Assert.Throws<ArgumentException>(() =>
+            DeviceEnrollmentClient.BuildChallengeUrl(new Uri(enrollmentUrl))
+        );
     }
 }
 
@@ -193,7 +189,7 @@ public class EnrollmentStateTests
         {
             EnrollmentConfig saved = new()
             {
-                Url = "https://portal.ezca.io/api/enroll/device/abc",
+                Url = "https://portal.ezca.io/api/enroll/device/a/b/c",
                 LastIssuedThumbprint = "AABBCCDDEEFF00112233445566778899AABBCCDD",
                 LastIssuedSubject = "CN=ws123.contoso.com",
             };
@@ -209,6 +205,4 @@ public class EnrollmentStateTests
             File.Delete(path);
         }
     }
-
-
 }

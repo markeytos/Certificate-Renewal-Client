@@ -8,17 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace DotNetCertAuthSample.Services;
 
 /// <summary>
-/// Raised when the enrollment endpoint issued a certificate for a request that carried no proof
-/// this machine produced it. It is its own type so that trying a different attestation, which is
-/// the right answer to a credential this machine cannot produce, is not the answer to this.
-/// </summary>
-public class UnboundEnrollmentResponseException(string message) : Exception(message) { }
-
-/// <summary>
-/// Raised when EZCA authenticated the machine and then refused to issue to it. This is a decision
-/// about the identity that was proved, not a problem with proving it, so it must not be retried
-/// with a different credential: doing so would let a machine removed from the allowed Active
-/// Directory group enrol anyway through its Entra identity.
+/// Raised when EZCA proved who the device is and then refused to issue to it, for example because
+/// the device is disabled or not in a group the profile allows. Retrying does not change that
+/// answer, so it is reported as it is.
 /// </summary>
 public class EnrollmentForbiddenException(string message) : Exception(message) { }
 
@@ -27,12 +19,47 @@ public class EnrollmentForbiddenException(string message) : Exception(message) {
 /// The certificate that comes back is issued against the attested identity, so nothing this client
 /// puts in the CSR subject decides what the certificate says.
 /// </summary>
-public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
+public class DeviceEnrollmentClient
 {
+    /// <summary>
+    /// Attempts per enrollment when EZCA answers that it is receiving too many requests (429).
+    /// Each attempt starts with a new challenge, since EZCA spends a challenge as soon as a request
+    /// names it. A 503 (EZCA couldn't reach Entra ID) is not retried here: EZCA then turns the
+    /// device away for several minutes, so an attempt a minute later would only get a 429 that
+    /// hides the original error. The next scheduled run tries again.
+    /// </summary>
+    internal const int MaxAttempts = 3;
+
+    /// <summary>The longest this client waits between attempts, whatever EZCA asks for.</summary>
+    internal static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
+
+    private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromSeconds(60);
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
+
+    private readonly HttpClient _httpClient;
+    private readonly ILogger _logger;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+
+    public DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
+        : this(httpClient, logger, null) { }
+
+    /// <param name="delay">How to wait between attempts. Defaults to Task.Delay; tests pass their own.</param>
+    public DeviceEnrollmentClient(
+        HttpClient httpClient,
+        ILogger logger,
+        Func<TimeSpan, CancellationToken, Task>? delay
+    )
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(logger);
+        _httpClient = httpClient;
+        _logger = logger;
+        _delay = delay ?? Task.Delay;
+    }
 
     public async Task<DeviceEnrollmentResponse> EnrollAsync(
         Uri enrollmentUrl,
@@ -45,56 +72,65 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(enrollmentUrl);
         ArgumentNullException.ThrowIfNull(attestor);
+        ArgumentNullException.ThrowIfNull(csrDer);
+        Uri challengeUrl = BuildChallengeUrl(enrollmentUrl);
 
-        DeviceEnrollmentChallenge? challenge = attestor.RequiresChallenge
-            ? await GetChallengeAsync(enrollmentUrl, cancellationToken)
-            : null;
-
-        using DeviceAttestationResult attestation = await attestor.AttestAsync(
-            enrollmentUrl,
-            csrDer,
-            challenge,
-            cancellationToken
-        );
-
-        DeviceEnrollmentRequest request = new()
+        for (int attempt = 1; ; attempt++)
         {
-            Csr = csrPem,
-            ChallengeId = challenge?.ChallengeId,
-            RequestBinding = attestation.RequestBinding,
-            DeviceId = attestation.DeviceId,
-            ClientReportedName = clientReportedName,
-        };
+            using HttpResponseMessage challengeResponse = await _httpClient.GetAsync(
+                challengeUrl,
+                cancellationToken
+            );
+            string challengeBody = await challengeResponse.Content.ReadAsStringAsync(
+                cancellationToken
+            );
+            if (await WaitIfTransientAsync(challengeResponse, attempt, cancellationToken))
+            {
+                continue;
+            }
 
-        HttpResponseMessage response = await PostAsync(
-            enrollmentUrl,
-            request,
-            attestation,
-            cancellationToken
-        );
+            DeviceEnrollmentChallenge challenge = ReadChallenge(
+                challengeUrl,
+                challengeResponse,
+                challengeBody
+            );
+            DeviceAttestationResult attestation = await attestor.AttestAsync(
+                enrollmentUrl,
+                csrDer,
+                challenge,
+                cancellationToken
+            );
+            if (string.IsNullOrWhiteSpace(attestation.RequestBinding))
+            {
+                throw new InvalidOperationException(
+                    "The attestation carried no proof that this device produced the certificate "
+                        + "request, so it was not sent."
+                );
+            }
 
-        // A multi leg handshake answers the first post with a challenge of its own.
-        if (
-            response.StatusCode == HttpStatusCode.Unauthorized
-            && attestation.Continue != null
-            && TryGetServerToken(response, attestation.Scheme, out string serverToken)
-        )
-        {
-            logger.LogInformation("Continuing the authentication handshake with the enrollment endpoint");
-            using DeviceAttestationResult next = attestation.Continue(serverToken);
-            request.RequestBinding = next.RequestBinding;
-            response.Dispose();
-            response = await PostAsync(enrollmentUrl, request, next, cancellationToken);
-        }
-
-        using (response)
-        {
+            DeviceEnrollmentRequest request = new()
+            {
+                Csr = csrPem,
+                ChallengeId = challenge.ChallengeId,
+                RequestBinding = attestation.RequestBinding,
+                DeviceId = attestation.DeviceId,
+                ClientReportedName = clientReportedName,
+            };
+            using HttpResponseMessage response = await PostAsync(
+                enrollmentUrl,
+                request,
+                attestation,
+                cancellationToken
+            );
             string body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (await WaitIfTransientAsync(response, attempt, cancellationToken))
+            {
+                continue;
+            }
+
             if (response.StatusCode == HttpStatusCode.Forbidden)
             {
-                throw new EnrollmentForbiddenException(
-                    DescribeFailure(response.StatusCode, body)
-                );
+                throw new EnrollmentForbiddenException(DescribeFailure(response.StatusCode, body));
             }
 
             if (!response.IsSuccessStatusCode)
@@ -102,21 +138,8 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
                 throw new InvalidOperationException(DescribeFailure(response.StatusCode, body));
             }
 
-            // A server that issues against an attestation we never bound to this certificate
-            // request is not one we can trust the answer from, so a success without a binding is
-            // refused here rather than installed.
-            if (attestor.RequiresChallenge && string.IsNullOrWhiteSpace(request.RequestBinding))
-            {
-                throw new UnboundEnrollmentResponseException(
-                    "The enrollment endpoint issued a certificate for a request that carried no "
-                        + "proof this machine produced it. The certificate was not installed."
-                );
-            }
-
-            DeviceEnrollmentResponse? enrollment = JsonSerializer.Deserialize<DeviceEnrollmentResponse>(
-                body,
-                SerializerOptions
-            );
+            DeviceEnrollmentResponse? enrollment =
+                JsonSerializer.Deserialize<DeviceEnrollmentResponse>(body, SerializerOptions);
             if (enrollment == null || string.IsNullOrWhiteSpace(enrollment.Certificate))
             {
                 throw new InvalidOperationException(
@@ -128,17 +151,71 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
         }
     }
 
-    private async Task<DeviceEnrollmentChallenge> GetChallengeAsync(
-        Uri enrollmentUrl,
-        CancellationToken cancellationToken
+    /// <summary>
+    /// The challenge belongs to the certificate authority, not the profile: the profile's
+    /// enrollment URL is <c>.../{tenant}/{ca}/{profile}</c> and its challenge is
+    /// <c>.../{tenant}/{ca}/challenge</c>. The profile segment is replaced rather than appended
+    /// to.
+    /// </summary>
+    internal static Uri BuildChallengeUrl(Uri enrollmentUrl)
+    {
+        ArgumentNullException.ThrowIfNull(enrollmentUrl);
+        if (!IsProfileEnrollmentUrl(enrollmentUrl))
+        {
+            throw new ArgumentException(
+                $"'{enrollmentUrl}' is not an Entra profile's enrollment URL. Copy the enrollment "
+                    + "URL the Keytos portal shows for the profile; it ends in the tenant, CA and "
+                    + "profile IDs.",
+                nameof(enrollmentUrl)
+            );
+        }
+
+        string path = enrollmentUrl.AbsolutePath.TrimEnd('/');
+        UriBuilder challengeUrl = new(enrollmentUrl)
+        {
+            Path = path[..path.LastIndexOf('/')] + "/challenge",
+        };
+        return challengeUrl.Uri;
+    }
+
+    /// <summary>
+    /// Whether the URL is an Entra profile's enrollment URL as the portal shows it: it ends in the
+    /// tenant, CA and profile IDs, with at most one trailing slash, and carries no query string or
+    /// fragment. Anything before the IDs is the address EZCA is reached at, which may carry a
+    /// path. The device signs the URL, and EZCA checks the signature against the URL it handed
+    /// out, so any other spelling would fail on every enrollment.
+    /// </summary>
+    public static bool IsProfileEnrollmentUrl(Uri enrollmentUrl)
+    {
+        ArgumentNullException.ThrowIfNull(enrollmentUrl);
+        if (
+            !enrollmentUrl.IsAbsoluteUri
+            || !string.IsNullOrEmpty(enrollmentUrl.Query)
+            || !string.IsNullOrEmpty(enrollmentUrl.Fragment)
+        )
+        {
+            return false;
+        }
+
+        string path = enrollmentUrl.AbsolutePath;
+        if (path.EndsWith('/'))
+        {
+            path = path[..^1];
+        }
+
+        string[] segments = path.Split('/');
+        // The first segment is the empty one before the leading slash.
+        return segments.Length >= 4
+            && segments[1..].All(segment => segment.Length > 0)
+            && segments[^3..].All(segment => Guid.TryParseExact(segment, "D", out _));
+    }
+
+    private static DeviceEnrollmentChallenge ReadChallenge(
+        Uri challengeUrl,
+        HttpResponseMessage response,
+        string body
     )
     {
-        Uri challengeUrl = BuildChallengeUrl(enrollmentUrl);
-        using HttpResponseMessage response = await httpClient.GetAsync(
-            challengeUrl,
-            cancellationToken
-        );
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
@@ -147,10 +224,19 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
             );
         }
 
-        DeviceEnrollmentChallenge? challenge = JsonSerializer.Deserialize<DeviceEnrollmentChallenge>(
-            body,
-            SerializerOptions
-        );
+        DeviceEnrollmentChallenge? challenge;
+        try
+        {
+            challenge = JsonSerializer.Deserialize<DeviceEnrollmentChallenge>(
+                body,
+                SerializerOptions
+            );
+        }
+        catch (JsonException)
+        {
+            challenge = null;
+        }
+
         if (
             challenge == null
             || string.IsNullOrWhiteSpace(challenge.ChallengeId)
@@ -174,17 +260,55 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
     }
 
     /// <summary>
-    /// Appends the challenge segment to the enrollment path, keeping any query string, which
-    /// string concatenation would have pushed behind the appended segment.
+    /// Waits before the next attempt when EZCA answered 429 and attempts are left, and says
+    /// whether it did. The last attempt's answer is left for the caller to report.
     /// </summary>
-    internal static Uri BuildChallengeUrl(Uri enrollmentUrl)
+    private async Task<bool> WaitIfTransientAsync(
+        HttpResponseMessage response,
+        int attempt,
+        CancellationToken cancellationToken
+    )
     {
-        ArgumentNullException.ThrowIfNull(enrollmentUrl);
-        UriBuilder challengeUrl = new(enrollmentUrl)
+        if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxAttempts)
         {
-            Path = enrollmentUrl.AbsolutePath.TrimEnd('/') + "/challenge",
-        };
-        return challengeUrl.Uri;
+            return false;
+        }
+
+        TimeSpan delay = ReadRetryDelay(response, attempt);
+        _logger.LogWarning(
+            "EZCA answered {StatusCode}; trying again in {DelaySeconds} seconds (attempt {Attempt} of {MaxAttempts})",
+            (int)response.StatusCode,
+            (int)delay.TotalSeconds,
+            attempt + 1,
+            MaxAttempts
+        );
+        await _delay(delay, cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Retry-After when EZCA sends one, otherwise a minute per attempt so far, never more than
+    /// <see cref="MaxRetryDelay"/>.
+    /// </summary>
+    internal static TimeSpan ReadRetryDelay(HttpResponseMessage response, int attempt)
+    {
+        TimeSpan delay = DefaultRetryDelay * attempt;
+        RetryConditionHeaderValue? retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is TimeSpan retryDelta)
+        {
+            delay = retryDelta;
+        }
+        else if (retryAfter?.Date is DateTimeOffset retryAt)
+        {
+            delay = retryAt - DateTimeOffset.UtcNow;
+        }
+
+        if (delay < TimeSpan.Zero)
+        {
+            delay = TimeSpan.Zero;
+        }
+
+        return delay > MaxRetryDelay ? MaxRetryDelay : delay;
     }
 
     private static bool IsBase64(string value)
@@ -207,36 +331,14 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
             attestation.Scheme,
             attestation.Token
         );
-        return await httpClient.SendAsync(message, cancellationToken);
-    }
-
-    private static bool TryGetServerToken(
-        HttpResponseMessage response,
-        string scheme,
-        out string token
-    )
-    {
-        foreach (AuthenticationHeaderValue header in response.Headers.WwwAuthenticate)
-        {
-            if (
-                header.Scheme.Equals(scheme, StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrWhiteSpace(header.Parameter)
-            )
-            {
-                token = header.Parameter;
-                return true;
-            }
-        }
-
-        token = string.Empty;
-        return false;
+        return await _httpClient.SendAsync(message, cancellationToken);
     }
 
     /// <summary>
     /// Turns a failed enrollment into something an administrator reading a scheduled task log can
     /// act on, since the usual causes each need a different fix.
     /// </summary>
-    private static string DescribeFailure(HttpStatusCode statusCode, string body)
+    internal static string DescribeFailure(HttpStatusCode statusCode, string body)
     {
         string detail = body;
         try
@@ -258,14 +360,22 @@ public class DeviceEnrollmentClient(HttpClient httpClient, ILogger logger)
         string hint = statusCode switch
         {
             HttpStatusCode.Unauthorized =>
-                " EZCA did not accept this machine's credential. Check that the enrollment account's "
-                + "key in EZCA is current, since it has to be rotated, and that this machine's clock "
-                + "is within five minutes of the domain's.",
+                " EZCA did not accept this device's Entra registration. Run 'dsregcmd /status' to "
+                    + "check that the device is Entra joined or hybrid joined to the tenant the CA "
+                    + "belongs to, and that this command runs as SYSTEM.",
             HttpStatusCode.Forbidden =>
-                " This machine authenticated but is not allowed to enroll. Check that its computer "
-                + "object is in the group the enrollment policy allows.",
+                " This device proved who it is but EZCA won't issue to it. The message says why: "
+                    + "usually the device is disabled in Entra ID or outside the profile's groups, "
+                    + "but the CA's subscription or its IP restrictions can refuse it too.",
             HttpStatusCode.NotFound =>
-                " Check that the enrollment URL is the one from the Keytos portal.",
+                " Check that the enrollment URL is the one the Keytos portal shows for the profile, "
+                    + "and that the profile is enabled.",
+            HttpStatusCode.TooManyRequests =>
+                " EZCA is receiving too many requests, or Entra ID didn't vouch for this device a "
+                    + "few minutes ago; the next scheduled run will try again.",
+            HttpStatusCode.ServiceUnavailable =>
+                " EZCA couldn't check this device with Entra ID just now; the next scheduled run "
+                    + "will try again.",
             _ => string.Empty,
         };
 

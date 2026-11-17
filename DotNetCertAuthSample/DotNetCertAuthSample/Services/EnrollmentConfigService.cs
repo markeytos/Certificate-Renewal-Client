@@ -15,20 +15,13 @@ namespace DotNetCertAuthSample.Services;
 public class UntrustedEnrollmentConfigException(string message) : Exception(message) { }
 
 /// <summary>
-/// Where the machine keeps its enrollment settings. Group Policy passes a command line that every
-/// authenticated user in the domain can read out of SYSVOL, so the less that command line has to
-/// carry the better; with this file in place it carries nothing but the verb.
+/// Where the device keeps its enrollment settings, so the scheduled task's command line carries
+/// nothing but the verb, and whatever deployed the client only has to set the URL once.
 /// </summary>
 public class EnrollmentConfig
 {
     [JsonPropertyName("url")]
     public string? Url { get; set; }
-
-    [JsonPropertyName("mode")]
-    public string? Mode { get; set; }
-
-    [JsonPropertyName("spn")]
-    public string? Spn { get; set; }
 
     /// <summary>
     /// Thumbprint of the certificate the last successful enrollment installed. This is how a
@@ -680,20 +673,6 @@ public class EnrollmentConfigService : IEnrollmentConfigService
         if (string.IsNullOrWhiteSpace(values.Url))
         {
             values.Url = config.Url;
-        }
-
-        if (string.IsNullOrWhiteSpace(values.Spn))
-        {
-            values.Spn = config.Spn;
-        }
-
-        if (
-            values.Mode == AttestationMode.Auto
-            && !string.IsNullOrWhiteSpace(config.Mode)
-            && Enum.TryParse(config.Mode, true, out AttestationMode savedMode)
-        )
-        {
-            values.Mode = savedMode;
         }
     }
 }

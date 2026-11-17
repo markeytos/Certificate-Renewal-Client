@@ -976,9 +976,11 @@ public class CertificateManager(
     }
 
     /// <summary>
-    /// Requests a device certificate from EZCA, proving which machine is asking with a credential
-    /// the machine already holds. Nothing secret is distributed to get this far, and the subject of
-    /// the certificate is decided by EZCA from the attested identity rather than by this client.
+    /// Requests a device certificate from EZCA for an Entra joined or hybrid joined Windows device,
+    /// proving which device is asking with its Entra device registration. Nothing secret is
+    /// distributed to get this far, and the subject of the certificate is decided by EZCA from the
+    /// attested identity rather than by this client. Domain joined machines don't use this: they
+    /// enroll with Windows autoenrollment, which needs no client.
     /// </summary>
     private async Task<int> EnrollDeviceAsync(EnrollArgModel values)
     {
@@ -989,6 +991,16 @@ public class CertificateManager(
 
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                // Only Windows has an Entra device registration to prove the device's identity
+                // with. Checked before the configuration is read, so another platform gets this
+                // error rather than one about the configuration file.
+                throw new PlatformNotSupportedException(
+                    "Device enrollment needs an Entra joined or hybrid joined Windows device."
+                );
+            }
+
             EnrollmentConfigService configService = new();
             EnrollmentConfig config = configService.Load(values.ConfigFile, _logger);
             EnrollmentConfigService.ApplyTo(values, config);
@@ -1001,17 +1013,23 @@ public class CertificateManager(
                 // cannot reach EZCA, and the installer wants the scheduled task to be able to
                 // retry on a machine that was offline while it was being set up.
                 config.Url = values.Url;
-                config.Mode =
-                    values.Mode == AttestationMode.Auto
-                        ? null
-                        : values.Mode.ToString().ToLowerInvariant();
-                config.Spn = values.Spn;
                 configService.Save(config, values.ConfigFile, _logger);
             }
 
             if (!values.Force && HasCertificateThatIsNotDue(values, config))
             {
                 return 0;
+            }
+
+            // Checked after the URL is saved, so an install that runs before the device has joined
+            // Entra still leaves the scheduled task what it needs, and before anything is created,
+            // so a device that can't attest leaves no key or pending request behind.
+            EntraDeviceAttestor attestor = new(_logger);
+            if (!attestor.IsAvailable(out string unavailableReason))
+            {
+                throw new InvalidOperationException(
+                    "This device can't prove its identity to EZCA: " + unavailableReason + "."
+                );
             }
 
             bool exportable = ShouldMakePrivateKeyExportable(values.Path);
@@ -1035,10 +1053,9 @@ public class CertificateManager(
 
             byte[] csrDer = PemToDer(csrPem);
             DeviceEnrollmentClient enrollmentClient = new(_httpClient, _logger);
-            DeviceEnrollmentResponse enrollment = await AttestAndEnrollAsync(
-                enrollmentClient,
-                values,
+            DeviceEnrollmentResponse enrollment = await enrollmentClient.EnrollAsync(
                 enrollmentUrl,
+                attestor,
                 csrDer,
                 ToStandardCsrPem(csrDer),
                 subjectName
@@ -1133,6 +1150,15 @@ public class CertificateManager(
             throw new ArgumentException($"'{values.Url}' is not a valid enrollment URL.");
         }
 
+        if (!DeviceEnrollmentClient.IsProfileEnrollmentUrl(parsed))
+        {
+            throw new ArgumentException(
+                $"'{values.Url}' is not an Entra profile's enrollment URL. Copy the enrollment URL "
+                    + "the Keytos portal shows for the profile; it ends in the tenant, CA and "
+                    + "profile IDs."
+            );
+        }
+
         // The attestation token, the request binding and the issued certificate all travel over
         // this URL, so plaintext is refused outside a local development endpoint.
         bool isPlainHttpToLoopback = parsed.Scheme == Uri.UriSchemeHttp && parsed.IsLoopback;
@@ -1149,18 +1175,6 @@ public class CertificateManager(
             throw new ArgumentException("Key length must be 2048 or 4096");
         }
 
-        if (OperatingSystem.IsLinux() && string.IsNullOrWhiteSpace(values.Password))
-        {
-            // The Linux store is a directory of password protected files and refuses to be
-            // searched without one, for the user store as well as the machine store. Without a
-            // password this command could install a certificate and then never find it again, so
-            // it would enrol afresh on every run.
-            throw new ArgumentException(
-                "--Password is required on Linux, because the certificate store cannot be read "
-                    + "back without it."
-            );
-        }
-
         if (values.EKUs is null or { Count: 0 })
         {
             values.EKUs = [EZCAConstants.ClientAuthenticationEKU];
@@ -1173,87 +1187,6 @@ public class CertificateManager(
                 "Renewal percentage must be between 1 and 100"
             );
         }
-    }
-
-    /// <summary>
-    /// Tries each attestation this machine might be able to produce, in order, and enrolls with
-    /// the first that works. In Auto, Kerberos comes first: every hybrid joined machine is also
-    /// domain joined, and the Kerberos identity carries the machine SID, so it is the stronger of
-    /// the two wherever both are available.
-    ///
-    /// Falling back on failure and not only on availability matters because no cheap local check
-    /// can tell an Active Directory member from a machine that merely has a DNS suffix, so
-    /// Kerberos can look available on a machine that cannot actually get a ticket.
-    /// </summary>
-    private async Task<DeviceEnrollmentResponse> AttestAndEnrollAsync(
-        DeviceEnrollmentClient enrollmentClient,
-        EnrollArgModel values,
-        Uri enrollmentUrl,
-        byte[] csrDer,
-        string csrPem,
-        string clientReportedName
-    )
-    {
-        List<IDeviceAttestor> candidates = values.Mode switch
-        {
-            AttestationMode.Kerberos =>
-            [
-                new KerberosDeviceAttestor(_logger!, systemInfoService, values.Spn),
-            ],
-            AttestationMode.Entra => [new EntraDeviceAttestor(_logger!)],
-            _ =>
-            [
-                new KerberosDeviceAttestor(_logger!, systemInfoService, values.Spn),
-                new EntraDeviceAttestor(_logger!),
-            ],
-        };
-
-        List<string> rejected = [];
-        Exception? lastFailure = null;
-        foreach (IDeviceAttestor candidate in candidates)
-        {
-            if (!candidate.IsAvailable(out string reason))
-            {
-                rejected.Add($"{candidate.Name} ({reason})");
-                continue;
-            }
-
-            LogInformation($"Proving this machine's identity with {candidate.Name}");
-            try
-            {
-                return await enrollmentClient.EnrollAsync(
-                    enrollmentUrl,
-                    candidate,
-                    csrDer,
-                    csrPem,
-                    clientReportedName
-                );
-            }
-            // Only a failure to produce or use a credential is worth retrying with another one.
-            // A response we could not bind to our own request, and an explicit refusal to issue
-            // to the identity we proved, are decisions rather than credential problems, and
-            // retrying either would be working around the answer. A timeout is neither: nothing
-            // threads a cancellation token into this call, so the only cancellation reachable
-            // here is an HttpClient timeout, which is exactly the transient failure the fallback
-            // exists for. Thread a token in and this needs revisiting.
-            catch (Exception ex)
-                when (ex is not UnboundEnrollmentResponseException
-                    && ex is not EnrollmentForbiddenException
-                )
-            {
-                // Every candidate's failure is collected, the last one included, so the error the
-                // administrator reads names each attestation that was tried and why it failed
-                // rather than only whichever happened to be last.
-                LogWarning($"Could not enroll with {candidate.Name}: {ex.Message}");
-                rejected.Add($"{candidate.Name} ({ex.Message})");
-                lastFailure = ex;
-            }
-        }
-
-        throw new InvalidOperationException(
-            "This machine could not prove its identity to EZCA: " + string.Join("; ", rejected),
-            lastFailure
-        );
     }
 
     /// <summary>

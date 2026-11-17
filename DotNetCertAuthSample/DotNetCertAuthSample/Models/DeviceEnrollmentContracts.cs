@@ -28,16 +28,15 @@ public class DeviceEnrollmentRequest
     public string? ChallengeId { get; set; }
 
     /// <summary>
-    /// Proof that the machine that produced the attestation is the one that produced this CSR,
-    /// computed over the challenge nonce and the CSR. Kerberos uses a MAC under the Kerberos
-    /// session key; Entra uses a signature from the device registration key.
+    /// Proof that the device that produced the attestation is the one that produced this CSR: a
+    /// signature from the device registration key over <see cref="Services.DeviceAttestationBinding"/>.
     /// </summary>
     [JsonPropertyName("requestBinding")]
     public string? RequestBinding { get; set; }
 
     /// <summary>
-    /// Only set for Entra attestation, where the identity is not carried by the Authorization
-    /// token itself.
+    /// The Entra device ID. EZCA reads the identity from the device certificate in the
+    /// Authorization header and only checks that this matches it.
     /// </summary>
     [JsonPropertyName("deviceId")]
     public string? DeviceId { get; set; }

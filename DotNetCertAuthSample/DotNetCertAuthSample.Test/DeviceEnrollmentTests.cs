@@ -196,21 +196,38 @@ public class EnrollmentConfigServiceTests
         try
         {
             service.Save(
-                new EnrollmentConfig
-                {
-                    Url = "https://portal.ezca.io/api/enroll/device/abc",
-                    Mode = "kerberos",
-                    Spn = "HTTP/enroll.ezca.io",
-                },
+                new EnrollmentConfig { Url = ProfileUrl, LastIssuedThumbprint = "ABCDEF" },
                 path,
                 NullLogger.Instance
             );
 
             EnrollmentConfig loaded = service.Load(path, NullLogger.Instance);
 
-            Assert.Equal("https://portal.ezca.io/api/enroll/device/abc", loaded.Url);
-            Assert.Equal("kerberos", loaded.Mode);
-            Assert.Equal("HTTP/enroll.ezca.io", loaded.Spn);
+            Assert.Equal(ProfileUrl, loaded.Url);
+            Assert.Equal("ABCDEF", loaded.LastIssuedThumbprint);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void A_File_From_An_Earlier_Build_With_A_Mode_Still_Loads()
+    {
+        // Earlier builds also saved how to attest; the setting is gone, and an old file has to
+        // keep working rather than stopping the scheduled task.
+        string path = Path.Combine(Path.GetTempPath(), $"ezca-enrollment-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(
+                path,
+                "{\"url\":\"" + ProfileUrl + "\",\"mode\":\"kerberos\",\"spn\":\"HTTP/x\"}"
+            );
+
+            EnrollmentConfig loaded = new EnrollmentConfigService().Load(path, NullLogger.Instance);
+
+            Assert.Equal(ProfileUrl, loaded.Url);
         }
         finally
         {
@@ -230,109 +247,62 @@ public class EnrollmentConfigServiceTests
     }
 
     [Fact]
-    public void Command_Line_Arguments_Win_Over_The_Saved_Configuration()
+    public void The_Command_Line_Url_Wins_Over_The_Saved_One()
     {
-        EnrollArgModel values = new()
-        {
-            Url = "https://from-command-line.example.com",
-            Mode = AttestationMode.Entra,
-            Spn = "HTTP/from-command-line",
-        };
+        EnrollArgModel values = new() { Url = "https://from-command-line.example.com" };
 
         EnrollmentConfigService.ApplyTo(
             values,
-            new EnrollmentConfig
-            {
-                Url = "https://from-file.example.com",
-                Mode = "kerberos",
-                Spn = "HTTP/from-file",
-            }
+            new EnrollmentConfig { Url = "https://from-file.example.com" }
         );
 
         Assert.Equal("https://from-command-line.example.com", values.Url);
-        Assert.Equal(AttestationMode.Entra, values.Mode);
-        Assert.Equal("HTTP/from-command-line", values.Spn);
     }
 
     [Fact]
-    public void The_Saved_Configuration_Fills_In_What_Was_Not_Passed()
+    public void The_Saved_Url_Fills_In_When_None_Was_Passed()
     {
         EnrollArgModel values = new();
 
         EnrollmentConfigService.ApplyTo(
             values,
-            new EnrollmentConfig
-            {
-                Url = "https://from-file.example.com",
-                Mode = "kerberos",
-                Spn = "HTTP/from-file",
-            }
+            new EnrollmentConfig { Url = "https://from-file.example.com" }
         );
 
         Assert.Equal("https://from-file.example.com", values.Url);
-        Assert.Equal(AttestationMode.Kerberos, values.Mode);
-        Assert.Equal("HTTP/from-file", values.Spn);
     }
 
-    [Fact]
-    public void An_Unreadable_Mode_In_The_File_Leaves_Auto_Alone()
-    {
-        EnrollArgModel values = new();
-
-        EnrollmentConfigService.ApplyTo(values, new EnrollmentConfig { Mode = "smartcard" });
-
-        Assert.Equal(AttestationMode.Auto, values.Mode);
-    }
+    private const string ProfileUrl =
+        "https://portal.ezca.io/api/enroll/device/"
+        + "11111111-1111-1111-1111-111111111111/"
+        + "22222222-2222-2222-2222-222222222222/"
+        + "33333333-3333-3333-3333-333333333333";
 }
 
 public class DeviceAttestorTests
 {
     [Fact]
-    public void Both_Attestations_Need_A_Challenge_From_The_Server()
+    public void An_Unavailable_Attestation_Explains_Itself()
     {
-        // The challenge is what stops a captured attestation being redeemed a second time, so
-        // neither attestor is allowed to skip it.
-        Assert.True(new KerberosDeviceAttestor(NullLogger.Instance).RequiresChallenge);
-        Assert.True(new EntraDeviceAttestor(NullLogger.Instance).RequiresChallenge);
-    }
-
-    [Fact]
-    public async Task Entra_Attestation_Refuses_To_Run_Without_A_Challenge()
-    {
+        // Whether or not the machine running the tests is joined, the reason has to be something
+        // an administrator reading a scheduled task log can act on.
         EntraDeviceAttestor attestor = new(NullLogger.Instance);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            attestor.AttestAsync(
-                new Uri("https://portal.ezca.io/api/enroll/device/abc"),
-                [1, 2, 3],
-                challenge: null,
-                CancellationToken.None
-            )
+        bool isAvailable = attestor.IsAvailable(out string reason);
+
+        Assert.True(
+            isAvailable ^ !string.IsNullOrWhiteSpace(reason),
+            $"availability {isAvailable} with reason '{reason}'"
         );
     }
 
     [Fact]
-    public void An_Unavailable_Attestation_Explains_Itself()
+    public void A_Device_Without_A_Registration_Certificate_Is_Not_Available()
     {
-        // Whichever of these is unavailable on the machine running the tests, the reason has to be
-        // something an administrator reading a scheduled task log can act on.
-        foreach (
-            IDeviceAttestor attestor in new IDeviceAttestor[]
-            {
-                new KerberosDeviceAttestor(NullLogger.Instance),
-                new EntraDeviceAttestor(NullLogger.Instance),
-            }
-        )
-        {
-            bool isAvailable = attestor.IsAvailable(out string reason);
+        EntraDeviceAttestor attestor = new(NullLogger.Instance, () => null);
 
-            // Exactly one of these has to hold whatever this machine is, so the test asserts on
-            // every run rather than quietly passing on a machine where both are available.
-            Assert.True(
-                isAvailable ^ !string.IsNullOrWhiteSpace(reason),
-                $"{attestor.Name} returned availability {isAvailable} with reason '{reason}'"
-            );
-        }
+        Assert.False(attestor.IsAvailable(out string reason));
+        Assert.Contains(OperatingSystem.IsWindows() ? "dsregcmd" : "Entra", reason);
     }
 
     [Fact]

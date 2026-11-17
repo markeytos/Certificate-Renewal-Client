@@ -6,12 +6,14 @@ using DotNetCertAuthSample.Models;
 namespace DotNetCertAuthSample.Services;
 
 /// <summary>
-/// The bytes an attestation signs or MACs to tie itself to one enrollment.
+/// The bytes the device signs to tie its attestation to one enrollment. EZCA builds the same
+/// bytes and the two have to agree byte for byte.
 ///
 /// Everything the server acts on has to be in here. The certificate request is covered by its
 /// hash, which also covers the EKUs and SANs it asks for, so no separate unsigned field may carry
-/// anything the server reads. The scheme and the endpoint are covered too, so a binding produced
-/// for one kind of attestation or for one CA cannot be presented as another.
+/// anything the server reads. The scheme and the enrollment URL are covered too, and the URL names
+/// the tenant, the CA and the profile, so a binding produced for one of them cannot be presented
+/// to another.
 /// </summary>
 public static class DeviceAttestationBinding
 {

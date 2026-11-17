@@ -45,14 +45,21 @@ Bindings keep whichever store they already read from. Certificates are issued in
 
 All of these need to run elevated, and IIS binding changes are written to `applicationHost.config`.
 
-## Device enrollment for domain joined and Entra joined machines (`enroll`)
+## Device enrollment for Entra joined devices (`enroll`)
 
-`enroll` asks EZCA for a device certificate and proves which machine is asking with a credential the
-machine already holds, so nothing secret has to be distributed to get a machine its first
-certificate.
+`enroll` asks EZCA for a device certificate for an Entra joined or hybrid joined Windows device, and
+proves which device is asking with the device's own Entra registration, so nothing secret has to be
+distributed to get a device its first certificate.
+
+Domain joined machines don't need this client: they get their certificates from Windows
+autoenrollment, which EZCA serves directly once its enrollment policy server is set in Group Policy.
+
+Copy the enrollment URL the Keytos portal shows for the Entra profile, exactly as shown. It ends in
+the tenant, CA and profile IDs, each profile has its own, and the device signs it, so a URL with
+anything added (a query string, say) fails every enrollment and is refused up front:
 
 ```powershell
-.\EZCACertManager.exe enroll --Url "https://portal.ezca.io/api/enroll/device/<subscription>/<ca>" --SaveConfig
+.\EZCACertManager.exe enroll --Url "https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>" --SaveConfig
 ```
 
 With `--SaveConfig` the URL is written to a machine wide configuration file, and later runs need no
@@ -62,151 +69,91 @@ arguments at all:
 .\EZCACertManager.exe enroll
 ```
 
-That matters for Group Policy. A Group Policy Preferences scheduled task stores its whole command
-line in SYSVOL, which every authenticated user in the domain can read, so the less the command line
-carries the better. The configuration file lives in `%ProgramData%\Keytos\EZCACertManager\` on
-Windows, `/etc/keytos/ezcacertmanager/` on Linux and `/Library/Application Support/Keytos/EZCACertManager/`
-on macOS.
+The configuration file lives in `%ProgramData%\Keytos\EZCACertManager\`. Run `enroll` as SYSTEM,
+as the installer's scheduled task does: the device registration certificate and its key are in the
+machine store.
 
-### How the machine proves who it is
+### How the device proves who it is
 
-| `--Mode` | Credential | Needs |
-| --- | --- | --- |
-| `Kerberos` | A Kerberos service ticket for the EZCA enrollment SPN | The machine is joined to Active Directory and can reach a domain controller |
-| `Entra` | A signature from the key behind the Entra device registration certificate | The machine is Entra joined or hybrid joined (Windows only) |
-| `Auto` (default) | Kerberos first, then Entra | — |
+When a Windows device joins Entra (or is hybrid joined), the Entra device registration service
+issues it a certificate whose subject is the Entra device ID, and Windows normally keeps its key in
+the TPM. `enroll` sends that certificate and signs the enrollment with its key. EZCA then checks
+that:
 
-Auto prefers Kerberos because every hybrid joined machine is also domain joined, and the Kerberos
-identity carries the machine SID.
+- the certificate chains to the Entra device registration service;
+- the signature verifies with the certificate's key, over this enrollment's challenge, URL and
+  certificate request;
+- Entra ID, in the CA's own tenant, lists this certificate as the current registration of an
+  enabled, Entra joined or hybrid joined device, in a group the profile allows.
+
+The issued certificate names the device by its Entra device ID (`EntraDeviceId://<device ID>`) and
+whatever else the profile's formats say, never by anything the device puts in its request. A hybrid
+joined device can also hold a certificate from Windows autoenrollment; the two are expected to
+coexist, for example while moving off Active Directory.
 
 `enroll` is also the renewal path: it checks the certificate it already has and does nothing unless
 that certificate is within `--RenewalPercentage` of expiry. Renewing therefore re-proves the
-machine's identity, so a computer account that has been disabled or deleted stops getting
+device's identity, so a device that has been disabled or deleted in Entra ID stops getting
 certificates rather than renewing on the strength of the certificate it already has. Run it from a
-scheduled task at startup and daily.
+scheduled task at startup and daily; the installer below sets that up.
 
-### What the enrollment endpoint has to implement
+### The enrollment exchange
 
-The client talks to two endpoints. `<url>` is the value of `--Url`.
+`<url>` is the profile's enrollment URL, `.../api/enroll/device/<tenant>/<ca>/<profile>`.
 
-`GET <url>/challenge`
+`GET .../api/enroll/device/<tenant>/<ca>/challenge` (the challenge belongs to the CA, so the profile
+segment is replaced):
 
 ```json
-{ "challengeId": "01HQ...", "nonce": "<base64>" }
+{ "challengeId": "<GUID>", "nonce": "<base64>" }
 ```
 
-`POST <url>` with `Authorization: Negotiate <base64 token>` for Kerberos, or
-`Authorization: EntraDevice <base64 utf8 device id>` for Entra, and body:
-
-> The Kerberos token is a **raw GSS-API Kerberos AP-REQ** (mech OID `1.2.840.113554.1.2.2`), not a
-> SPNEGO-wrapped one, even though it travels under the `Negotiate` scheme. The client asks for the
-> Kerberos package by name rather than Negotiate so that it can never fall back to NTLM, which
-> would carry no PAC and so no verifiable machine identity. SSPI and GSSAPI acceptors take both
-> forms; a strict SPNEGO-only decoder will not.
+`POST <url>` with `Authorization: EntraDevice <base64 DER of the device registration certificate>`
+and body:
 
 ```json
 {
   "csr": "<PEM certificate request>",
-  "challengeId": "01HQ...",
-  "requestBinding": "<base64>",
-  "deviceId": "<Entra device id, Entra mode only>",
-  "clientReportedName": "CN=machine.contoso.com"
+  "challengeId": "<GUID>",
+  "requestBinding": "<base64 signature>",
+  "deviceId": "<Entra device ID>",
+  "clientReportedName": "CN=device.contoso.com"
 }
 ```
 
 Answering `200`:
 
 ```json
-{ "certificate": "<PEM>", "subject": "CN=machine.contoso.com", "attestationSource": "kerberos" }
+{ "certificate": "<PEM>", "subject": "CN=...", "attestationSource": "entra" }
 ```
 
-`requestBinding` is what ties one attestation to one certificate request. It is computed over a
+`requestBinding` is an RSA PKCS#1 v1.5 SHA-256 signature, by the device registration key, over a
 byte string built from these fields, each written with its length as a little-endian `uint32` in
 front of it so no two different sets of values can produce the same bytes:
 
 | Order | Field |
 |---|---|
 | 1 | the ASCII context string `EZCA-DEVICE-ENROLL-v1` |
-| 2 | the Authorization scheme (`Negotiate` or `EntraDevice`) |
-| 3 | the absolute enrollment URL |
+| 2 | the Authorization scheme, `EntraDevice` |
+| 3 | the absolute enrollment URL, as `Uri.AbsoluteUri` writes it |
 | 4 | `challengeId` |
 | 5 | the raw nonce, base64-decoded |
 | 6 | `SHA256(csr DER)` |
 
-- **Kerberos** — the GSS integrity check (MIC) over those bytes under the Kerberos session key. The
-  server derives the same key when it accepts the AP-REQ, so a captured `Authorization` header
-  cannot be redeemed with a different key.
-- **Entra** — an RSA PKCS#1 v1.5 SHA-256 signature over those bytes by the device registration key,
-  verified against the public key Entra holds for that device object.
+The URL names the tenant, the CA and the profile, so a signature made for one of them can't be
+presented to another, and the challenge is spent on its first use, so a captured request can't be
+replayed. `deviceId` is only checked against the certificate and `clientReportedName` is only
+logged; the identity comes from the certificate.
 
-> **The Entra attestation is specified here but not implemented server-side.** The client can
-> produce it; EZCA cannot yet check it. Two things are known about finishing it, and one is not:
->
-> - **Entra does not hand back the device's public key.** The device object's
->   `alternativeSecurityIds` holds `X509:<SHA1-TP-PUBKEY>[thumbprint]+[publickeyhash]` — a SHA-1
->   thumbprint and a base64 SHA-256 hash — so there is nothing to verify a signature against
->   unless the request carries the key itself. The fix is on this side: the client must send its
->   whole `MS-Organization-Access` certificate, DER encoded, alongside the signature. The server
->   then matches SHA-1 over the certificate against the thumbprint, which is unambiguous, and
->   checks the key hash as a second test. Sending only the public key would not do: MS-DVRE
->   describes the hashed value as "the X.509 certificate public key", which reads as either the
->   SubjectPublicKeyInfo DER or the raw `subjectPublicKey` bits, and nothing settles which.
->   The attribute is multi-valued for key rollover, so any entry may match, and Microsoft
->   documents it as "for internal use only".
-> - **What such a certificate could assert is an open design question, not a detail.** This
->   feature exists for KB5014754 strong mapping, and what makes the certificate worth issuing is
->   the machine SID. A cloud-only Entra joined device has no Active Directory SID to carry.
->   Hybrid joined devices do — and they are domain joined, so the Kerberos path already covers
->   them. The population an Entra path would uniquely serve is therefore the one for which this
->   feature's premise does not hold. Deciding what an Entra-only device certificate asserts, and
->   whether the RADIUS side will accept it, comes before building any of the above.
-> - **Unproven:** that the `MS-Organization-Access` certificate's public key is the key whose hash
->   `alternativeSecurityIds` holds. It should be — that is the registration key — but it is an
->   inference. One test against a real Entra joined device settles it and the encoding question
->   together.
+Refusals come back as `{ "error": "<kind>", "message": "Error [E....]: ..." }`:
 
-The scheme and the URL are in there so a binding made for one kind of attestation, or for one CA,
-cannot be presented as another. The URL is the absolute URL **the client was configured with**, so
-the server must verify against its own configured canonical enrollment URL and not against the URL
-it observes on the request: behind a TLS-terminating proxy the request arrives with a different
-scheme, host or port, and comparing against that would fail every verification with nothing to
-diagnose from. Nothing outside this list may influence issuance: in particular the
-EKUs come from the CSR's own extension request, which the hash covers, and not from a separate
-field in the body, which nothing signs.
-
-Two rules the server side has to keep, because the client deliberately does not:
-
-1. **The subject and SANs of the issued certificate come from the attested identity, never from the
-   CSR.** `clientReportedName` is for diagnostics. The CSR is read for its public key and its
-   requested EKUs.
-   **Carry the SID twice.** Put it in the `tag:microsoft.com,2022-09-14:sid:<sid>` URI SAN *and*
-   in the `1.3.6.1.4.1.311.25.2` extension. A domain controller enforcing KB5014754 reads the
-   extension, which is what the SCEP certificates this replaces already carry; the URI SAN is what
-   Entra certificate-based authentication and Intune-issued certificates use. Only the issuing CA
-   can assert either, so neither comes from the request.
-2. **Burn the challenge on first use** and reject an expired one.
-3. **Key the Kerberos replay cache only on authenticated fields.** A ticket's service name and
-   realm travel outside its encrypted part (RFC 4120 §5.3), so a caller can rewrite them. A replay
-   cache keyed on anything taken from there — the service name, for instance — can be stepped past
-   by replaying the same AP-REQ with one letter's case changed. Key it on what the decrypted
-   authenticator and ticket actually attest to.
-4. **Refuse a ticket that carries delegation information.** A service trusted for constrained
-   delegation can obtain a ticket to the enrollment account *in another machine's name*, and it
-   holds the session key, so it can produce a request binding that verifies. Every other check
-   passes and it enrols a certificate for a machine it does not own. The PAC says when a ticket
-   arrived this way; reject it.
-5. **Do not let the policy allow the Any or KDC Authentication EKUs.** A device enrollment policy
-   that permits them lets a machine ask for a certificate that stands in for a domain controller.
-   The requested EKUs come from the CSR, which the binding covers, so the only place to stop this
-   is the policy.
-
-The URL the server verifies (field 3 of the binding) is configuration, not something read off the
-request — see above. It has to be byte-identical to the URL the machines are given, so whoever
-configures the endpoint should set both. A mismatch fails every binding and reports it as a `401`,
-which reads as the machine's credential being rejected rather than as a server misconfiguration.
-
-The client reports `401` and `403` differently, so return `401` when the credential itself was not
-accepted and `403` when the machine authenticated but is not allowed to enroll.
+| Status | Meaning | What the client does |
+|---|---|---|
+| `401` | EZCA didn't accept the device's registration (another tenant's, not its current one, or the signature didn't verify) | Fails, pointing at `dsregcmd /status` |
+| `403` | The device proved who it is but may not enroll (disabled, not in an allowed group, or a registered rather than joined device) | Fails |
+| `404` | The CA or profile doesn't offer device enrollment | Fails, pointing at the portal's URL |
+| `429` | EZCA is receiving too many requests, or Entra ID didn't vouch for this device a few minutes ago | Tries again with a new challenge, up to 3 attempts, waiting for `Retry-After` or a minute per attempt (at most 5 minutes) |
+| `503` | EZCA couldn't check the device with Entra ID just now | Fails; the next scheduled run tries again. EZCA turns the device away for a few minutes after this, so retrying sooner would only get a `429` |
 
 ### Key storage
 
@@ -228,22 +175,24 @@ length, since the default 4096 is more than a TPM will do:
 .\EZCACertManager.exe SCEPCertificate --LocalStore -k 2048 --KeyProvider "Microsoft Platform Crypto Provider" ...
 ```
 
-A provider you name is used or the command fails; only the default falls back. On Linux and macOS
-the key is created by BouncyCastle and the provider name is ignored.
+A provider you name is used or the command fails; only the default falls back. For
+`SCEPCertificate` on Linux and macOS the key is created by BouncyCastle and the provider name is
+ignored.
 
-### Deploying it with Group Policy
+### Deploying it
 
 The Windows release includes `EZCACertManager.msi`, which installs the client to
 `C:\Program Files\Keytos\EZCACertManager\` and registers a scheduled task that runs `enroll` as
-SYSTEM at startup and daily. Deploy it per machine through Group Policy software installation, or
+SYSTEM at startup and daily. Deploy it per device as a line-of-business app through Intune, or
 install it silently:
 
 ```powershell
-msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<subscription>/<ca>"
+msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>"
 ```
 
 `ENROLLURL` is written to the configuration file before the first enrollment is attempted, so a
-machine that was offline during the install still enrolls when the scheduled task next runs. The
+device that was offline during the install, or hadn't finished joining Entra, still enrolls when
+the scheduled task next runs. The
 install directory is fixed, because a scheduled task definition is not formatted by Windows
 Installer and so has to name the executable by path.
 
@@ -271,7 +220,7 @@ Two things about this are worth knowing before a release:
   and both fail silently because the enrollment custom action returns `ignore`:
 
   ```powershell
-  msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<sub>/<ca>"
+  msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>"
   icacls "C:\ProgramData\Keytos"
   Test-Path "C:\ProgramData\Keytos\EZCACertManager\enrollment.json"
   ```
@@ -281,13 +230,7 @@ Two things about this are worth knowing before a release:
   a container-inherited ACE and the client refuses to write into a chain in that state.
   `Test-Path` must return `True`: the client writes the configuration during the install, and it
   has to run after the extension applies those permissions. If the file is missing, the scheduled
-  task has no URL and the machine never enrols, on every machine in the fleet.
-- **The Linux and macOS check does not look at ownership.** It refuses a group- or world-writable
-  file or directory, which is all the platform APIs available here expose. On Linux the shared
-  root is `/etc`, which only root can write, so the gap is unreachable. On macOS
-  `/Library/Application Support` is group-writable by `admin`, so a member of that group can
-  create the directory chain and own it, and this check will accept it. The installer and the
-  scheduled task target Windows, so no shipped unattended path is affected.
+  task has no URL and the device never enrols, on every device in the fleet.
 
 ### Known limitation
 

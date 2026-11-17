@@ -3,25 +3,12 @@ using EZCAClient.Models;
 
 namespace DotNetCertAuthSample.Models;
 
-/// <summary>
-/// How the machine proves which machine it is when it asks EZCA for a device certificate.
-/// </summary>
-public enum AttestationMode
-{
-    /// <summary>Pick whichever the machine can actually produce, Kerberos first.</summary>
-    Auto,
-
-    /// <summary>A Kerberos service ticket for the EZCA enrollment SPN, issued by the machine's own domain controller.</summary>
-    Kerberos,
-
-    /// <summary>A signature from the key behind the machine's Entra device registration certificate.</summary>
-    Entra,
-}
-
 [Verb(
     "enroll",
-    HelpText = "Requests a device certificate from EZCA, proving the machine's identity with its "
-        + "Active Directory or Entra device credentials instead of a shared secret"
+    HelpText = "Requests a device certificate from EZCA for an Entra joined or hybrid joined Windows "
+        + "device, proving its identity with its Entra device registration instead of a shared "
+        + "secret. Domain joined machines don't need this: they enroll with Windows "
+        + "autoenrollment."
 )]
 public class EnrollArgModel
 {
@@ -29,24 +16,9 @@ public class EnrollArgModel
         'u',
         "Url",
         Required = false,
-        HelpText = "EZCA device enrollment URL. Falls back to the machine enrollment configuration file when omitted."
+        HelpText = "The enrollment URL the Keytos portal shows for the Entra profile. Falls back to the machine enrollment configuration file when omitted."
     )]
     public string? Url { get; set; }
-
-    [Option(
-        "Mode",
-        Required = false,
-        Default = AttestationMode.Auto,
-        HelpText = "How to prove this machine's identity: Auto, Kerberos or Entra. Auto tries Kerberos first and falls back to Entra."
-    )]
-    public AttestationMode Mode { get; set; } = AttestationMode.Auto;
-
-    [Option(
-        "Spn",
-        Required = false,
-        HelpText = "Service principal name of the EZCA enrollment account. Defaults to HTTP/<host of --Url>."
-    )]
-    public string? Spn { get; set; }
 
     [Option(
         "LocalStore",
@@ -60,7 +32,7 @@ public class EnrollArgModel
         "KeyProvider",
         Required = false,
         HelpText = "Windows key storage provider for the new key. Defaults to the TPM ('Microsoft Platform Crypto Provider'), "
-            + "falling back to a software key when the TPM cannot create one. Ignored on Linux and macOS."
+            + "falling back to a software key when the TPM cannot create one."
     )]
     public string? KeyProvider { get; set; }
 
@@ -109,7 +81,7 @@ public class EnrollArgModel
         "SaveConfig",
         Required = false,
         Default = false,
-        HelpText = "Writes the URL and mode used by this run to the machine enrollment configuration file, replacing what is already recorded. A first enrollment records its URL either way, so later runs need no arguments; this flag is how an already-configured machine is repointed."
+        HelpText = "Writes the URL used by this run to the machine enrollment configuration file, replacing what is already recorded. A first enrollment records its URL either way, so later runs need no arguments; this flag is how an already-configured machine is repointed."
     )]
     public bool SaveConfig { get; set; }
 

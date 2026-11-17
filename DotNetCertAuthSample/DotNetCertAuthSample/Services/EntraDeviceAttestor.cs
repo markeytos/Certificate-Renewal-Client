@@ -6,12 +6,14 @@ using Microsoft.Extensions.Logging;
 namespace DotNetCertAuthSample.Services;
 
 /// <summary>
-/// Proves the machine's identity with the key behind its Entra device registration certificate.
-/// A device that is Entra joined or hybrid joined holds that key in its TPM and Entra holds the
-/// matching public key against the device object, so EZCA can check the signature without the
-/// machine ever having been given a secret.
+/// Proves the device's identity with its Entra device registration certificate and the key behind
+/// it. Windows creates that certificate when the device is Entra joined or hybrid joined, and
+/// normally keeps its key in the TPM. EZCA checks that the certificate chains to the Entra device
+/// registration service, that the signature over this enrollment verifies with its key, and that
+/// Entra ID lists it as the current registration of an enabled device in the CA's own tenant, so
+/// the device never needs a secret from an administrator.
 /// </summary>
-public class EntraDeviceAttestor(ILogger logger) : IDeviceAttestor
+public class EntraDeviceAttestor : IDeviceAttestor
 {
     public const string AuthenticationScheme = "EntraDevice";
 
@@ -20,25 +22,42 @@ public class EntraDeviceAttestor(ILogger logger) : IDeviceAttestor
     /// </summary>
     public const string DeviceCertificateIssuer = "MS-Organization-Access";
 
-    public string Name => "entra";
+    private readonly ILogger _logger;
+    private readonly Func<X509Certificate2?> _findDeviceCertificate;
 
-    public bool RequiresChallenge => true;
+    public EntraDeviceAttestor(ILogger logger)
+        : this(logger, null) { }
+
+    /// <param name="findDeviceCertificate">
+    /// Finds the device registration certificate, with its private key. Defaults to searching the
+    /// machine store; tests pass their own.
+    /// </param>
+    public EntraDeviceAttestor(ILogger logger, Func<X509Certificate2?>? findDeviceCertificate)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        _logger = logger;
+        _findDeviceCertificate = findDeviceCertificate ?? FindDeviceCertificateInMachineStore;
+    }
+
+    public string Name => "Entra device";
 
     public bool IsAvailable(out string reason)
     {
         if (!OperatingSystem.IsWindows())
         {
             reason =
-                "Entra device attestation needs the device registration certificate Windows "
-                + "creates when a machine is Entra joined or hybrid joined";
+                "Entra device enrollment needs the device registration certificate Windows creates "
+                + "when a device is Entra joined or hybrid joined";
             return false;
         }
 
-        if (FindDeviceCertificate() == null)
+        using X509Certificate2? deviceCertificate = _findDeviceCertificate();
+        if (deviceCertificate == null)
         {
             reason =
-                "this machine has no Entra device registration certificate, so it is not Entra "
-                + "joined or hybrid joined. Run 'dsregcmd /status' to check its join state";
+                "this device has no Entra device registration certificate, so it is not Entra "
+                + "joined or hybrid joined, or the command is not running as SYSTEM or an "
+                + "administrator. Run 'dsregcmd /status' to check its join state";
             return false;
         }
 
@@ -49,44 +68,40 @@ public class EntraDeviceAttestor(ILogger logger) : IDeviceAttestor
     public Task<DeviceAttestationResult> AttestAsync(
         Uri enrollmentUrl,
         byte[] csrDer,
-        DeviceEnrollmentChallenge? challenge,
+        DeviceEnrollmentChallenge challenge,
         CancellationToken cancellationToken
     )
     {
+        ArgumentNullException.ThrowIfNull(enrollmentUrl);
         ArgumentNullException.ThrowIfNull(csrDer);
-        if (challenge == null || string.IsNullOrWhiteSpace(challenge.Nonce))
-        {
-            throw new InvalidOperationException(
-                "Entra device attestation needs a challenge from the enrollment endpoint."
-            );
-        }
+        ArgumentNullException.ThrowIfNull(challenge);
 
         using X509Certificate2 deviceCertificate =
-            FindDeviceCertificate()
+            _findDeviceCertificate()
             ?? throw new InvalidOperationException(
-                "This machine has no Entra device registration certificate."
+                "This device has no Entra device registration certificate."
             );
 
         string deviceId = GetDeviceId(deviceCertificate);
-        logger.LogInformation("Attesting as Entra device {DeviceId}", deviceId);
+        _logger.LogInformation("Attesting as Entra device {DeviceId}", deviceId);
 
         using RSA? privateKey = deviceCertificate.GetRSAPrivateKey();
         if (privateKey == null)
         {
             throw new InvalidOperationException(
-                "The Entra device registration certificate has no usable private key. This "
+                "The Entra device registration certificate has no usable RSA private key. This "
                     + "command has to run as SYSTEM or as an administrator to reach it."
             );
         }
 
-        byte[] signed = DeviceAttestationBinding.Build(
+        byte[] binding = DeviceAttestationBinding.Build(
             AuthenticationScheme,
             enrollmentUrl,
             challenge,
             csrDer
         );
         byte[] signature = privateKey.SignData(
-            signed,
+            binding,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1
         );
@@ -95,10 +110,11 @@ public class EntraDeviceAttestor(ILogger logger) : IDeviceAttestor
             new DeviceAttestationResult
             {
                 Scheme = AuthenticationScheme,
-                // The token names the device; the signature in the body is what proves it.
-                Token = Convert.ToBase64String(
-                    System.Text.Encoding.UTF8.GetBytes(deviceId)
-                ),
+                // The whole certificate, DER encoded: Entra keeps only its thumbprint against the
+                // device, so EZCA needs the certificate itself to check the chain and the
+                // signature. The certificate is not secret; the signature is what proves the
+                // device holds its key.
+                Token = Convert.ToBase64String(deviceCertificate.RawData),
                 RequestBinding = Convert.ToBase64String(signature),
                 DeviceId = deviceId,
             }
@@ -106,45 +122,73 @@ public class EntraDeviceAttestor(ILogger logger) : IDeviceAttestor
     }
 
     /// <summary>
-    /// The device registration certificate carries the Entra device id as its common name.
+    /// The device registration certificate carries the Entra device ID, a GUID, as its common
+    /// name. Read the way EZCA reads it, so a name EZCA would refuse is refused here first, with a
+    /// clearer error.
     /// </summary>
-    private static string GetDeviceId(X509Certificate2 deviceCertificate)
+    internal static string GetDeviceId(X509Certificate2 deviceCertificate)
     {
         string commonName = deviceCertificate.GetNameInfo(X509NameType.SimpleName, false);
-        if (string.IsNullOrWhiteSpace(commonName))
+        if (!Guid.TryParseExact(commonName, "D", out Guid deviceGuid) || deviceGuid == Guid.Empty)
         {
             throw new InvalidOperationException(
-                "Could not read the device id from the Entra device registration certificate."
+                "The Entra device registration certificate does not name a device ID."
             );
         }
 
-        return commonName;
+        return deviceGuid.ToString("D");
     }
 
-    private X509Certificate2? FindDeviceCertificate()
+    private X509Certificate2? FindDeviceCertificateInMachineStore()
     {
         try
         {
             using X509Store store = new(StoreName.My, StoreLocation.LocalMachine);
             store.Open(OpenFlags.ReadOnly);
-            return store
-                .Certificates.Where(certificate =>
-                    certificate.Issuer.Contains(
-                        DeviceCertificateIssuer,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                .Where(certificate =>
-                    new DateTimeOffset(certificate.NotAfter) > DateTimeOffset.Now
-                )
-                .OrderByDescending(certificate => certificate.NotAfter)
-                .FirstOrDefault();
+            X509Certificate2Collection certificates = store.Certificates;
+            X509Certificate2? chosen = null;
+            bool isHandedOver = false;
+            try
+            {
+                DateTime now = DateTime.Now;
+                foreach (X509Certificate2 certificate in certificates)
+                {
+                    bool isCandidate =
+                        certificate.Issuer.Contains(
+                            DeviceCertificateIssuer,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                        && certificate.NotBefore <= now
+                        && certificate.NotAfter > now
+                        && certificate.HasPrivateKey
+                        && (chosen == null || certificate.NotAfter > chosen.NotAfter);
+                    if (isCandidate)
+                    {
+                        chosen = certificate;
+                    }
+                }
+
+                isHandedOver = true;
+                return chosen;
+            }
+            finally
+            {
+                // The caller disposes the one it was handed; every other one is disposed here,
+                // the chosen one too if the search stopped with an error.
+                foreach (X509Certificate2 certificate in certificates)
+                {
+                    if (!isHandedOver || !ReferenceEquals(certificate, chosen))
+                    {
+                        certificate.Dispose();
+                    }
+                }
+            }
         }
         catch (CryptographicException ex)
         {
             // A machine store that cannot be opened is the same as one with nothing in it, but it
             // is worth saying so: the usual cause is not running elevated.
-            logger.LogDebug(ex, "Could not read the machine certificate store");
+            _logger.LogDebug(ex, "Could not read the machine certificate store");
             return null;
         }
     }
