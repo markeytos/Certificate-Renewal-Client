@@ -12,6 +12,14 @@
       "commandName": "Project",
       "commandLineArgs": " renewAll -a \"88248ab14399ec8476a493fbcfe36fbf36254afb\"  --EZCAInstance https://localhost:5001/ "
     },
+    "TestCreateIIS": {
+      "commandName": "Project",
+      "commandLineArgs": "create -d localhost --caid 2eb8b71e-62a6-46bd-a41b-f010defa8327 -v 30 -k 2048 --LocalStore --IISSite \"Default Web Site\" "
+    },
+    "TestRenewIIS": {
+      "commandName": "Project",
+      "commandLineArgs": "renew -s \"CN=localhost\" -i \"linux sub2\" --LocalStore --IISSite \"Default Web Site\"  -k 2048"
+    },
     "TestSCEP": {
       "commandName": "Project",
       "commandLineArgs": "SCEPCertificate  -u https://localhost:5001/api/SCEP/Static/1c3c6cea-fcbd-4681-85e1-74fb74b6863e/077cfd01-82ee-40bd-b709-f0f9b9d8f996/eastus/cgi-bin --EKUs 1.3.6.1.5.5.7.3.2 -s \"CN=server8.contoso.com\" -p AEF5F5C0CF0C7168  --SubjectAltNames igal "

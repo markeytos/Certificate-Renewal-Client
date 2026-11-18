@@ -56,7 +56,8 @@ public class Program
                 RegisterArgModel,
                 CreateDCCertificate,
                 SCEPArgModel,
-                RenewAllArgModel
+                RenewAllArgModel,
+                EnrollArgModel
             >(args)
             .MapResult(
                 (RenewArgModel operation) => certificateManager.InitializeManager(operation),
@@ -65,6 +66,7 @@ public class Program
                 (CreateDCCertificate operation) => certificateManager.InitializeManager(operation),
                 (SCEPArgModel operation) => certificateManager.InitializeManager(operation),
                 (RenewAllArgModel operation) => certificateManager.InitializeManager(operation),
+                (EnrollArgModel operation) => certificateManager.InitializeManager(operation),
                 errs => certificateManager.ProcessError(errs)
             );
         if (result == 0)

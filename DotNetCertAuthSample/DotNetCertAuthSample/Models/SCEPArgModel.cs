@@ -1,4 +1,5 @@
 using CommandLine;
+using DotNetCertAuthSample.Services;
 using EZCAClient.Models;
 
 namespace DotNetCertAuthSample.Models;
@@ -29,6 +30,16 @@ public class SCEPArgModel
 
     [Option('k', "KeyLength", HelpText = "Certificate Key Length", Default = 4096)]
     public int KeyLength { get; set; } = 4096;
+
+    [Option(
+        "KeyProvider",
+        Required = false,
+        Default = KeyProviders.LegacyCsp,
+        HelpText = "Windows key storage provider for the new key. For a key the machine cannot "
+            + "export, pass 'Microsoft Platform Crypto Provider' with -k 2048, since most TPMs cannot "
+            + "create a 4096 bit RSA key. Ignored on Linux and macOS."
+    )]
+    public string? KeyProvider { get; set; } = KeyProviders.LegacyCsp;
 
     [Option(
         "AppInsights",

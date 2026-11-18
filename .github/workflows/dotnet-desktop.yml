@@ -28,9 +28,16 @@ jobs:
           creds: ${{ secrets.EZCA_CLIENT_DEPLOYER  }}
       - name: Install SignTool
         run: dotnet tool install --global  AzureSignTool
+      - name: Install WiX
+        # Pinned: the installer names WiX's internal custom action binaries (Wix4UtilCA_X64 /
+        # Wix4UtilCA_A64), and a major version bump renames them, which would break the release
+        # build with no change in this repository.
+        run: |
+          dotnet tool install --global wix --version 7.0.0
+          wix extension add -g WixToolset.Util.wixext/7.0.1
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
-      - name: Run Powershell Script 
+      - name: Run Powershell Script
         run: .\DotNetCertAuthSample\build.ps1 -version "${{ inputs.version }}"
       - name: Upload x64 Artifact
         uses: actions/upload-artifact@v4
@@ -42,6 +49,16 @@ jobs:
         with:
           name: windows-binary-arm64
           path: .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0-windows\win-arm64\publish\EZCACertManager.exe
+      - name: Upload x64 Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-x64
+          path: .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0-windows\win-x64\publish\EZCACertManager.msi
+      - name: Upload arm64 Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-arm64
+          path: .\DotNetCertAuthSample\DotNetCertAuthSample\bin\Release\net10.0-windows\win-arm64\publish\EZCACertManager.msi
 
   build-macos:
     name: Build client for MacOS

@@ -1,7 +1,9 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotNetCertAuthSample.Managers;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Security;
 using Xunit;
 
 namespace DotNetCertAuthSample.Test;
@@ -55,6 +57,30 @@ public class ScepCaCertificateParsingTests
             RandomNumberGenerator.GetBytes(8)
         );
         return issued.CopyWithPrivateKey(rsa);
+    }
+
+    private static X509Certificate2 CreateEndEntity(
+        string commonName,
+        X509Certificate2 issuer,
+        X509KeyUsageFlags keyUsages,
+        RSA? subjectKey = null
+    )
+    {
+        RSA rsa = subjectKey ?? RSA.Create(2048);
+        CertificateRequest request = new(
+            $"CN={commonName}",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1
+        );
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(keyUsages, true));
+        return request.Create(
+            issuer,
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddYears(1),
+            RandomNumberGenerator.GetBytes(8)
+        );
     }
 
     [Fact]
@@ -158,7 +184,10 @@ public class ScepCaCertificateParsingTests
     {
         using X509Certificate2 root = CreateRootCa("Three Tier Root");
         using X509Certificate2 intermediate = CreateSubordinateCa("Three Tier Intermediate", root);
-        using X509Certificate2 issuingCa = CreateSubordinateCa("Three Tier Issuing CA", intermediate);
+        using X509Certificate2 issuingCa = CreateSubordinateCa(
+            "Three Tier Issuing CA",
+            intermediate
+        );
         X509Certificate2Collection certs = [root, intermediate, issuingCa];
 
         X509Certificate2 selected = CertificateManager.SelectIssuingCaCertificate(certs);
@@ -179,5 +208,119 @@ public class ScepCaCertificateParsingTests
         X509Certificate2 selected = CertificateManager.SelectIssuingCaCertificate(parsed);
 
         Assert.Equal(issuingCa.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectIssuingCaCertificate_BundleWithRaCertificate_SkipsTheRaCertificate()
+    {
+        using X509Certificate2 root = CreateRootCa("RA Bundle Root");
+        using X509Certificate2 issuingCa = CreateSubordinateCa("RA Bundle Issuing CA", root);
+        using X509Certificate2 raCert = CreateEndEntity(
+            "RA Bundle RA",
+            issuingCa,
+            X509KeyUsageFlags.KeyEncipherment
+        );
+        X509Certificate2Collection certs = [root, issuingCa, raCert];
+
+        X509Certificate2 selected = CertificateManager.SelectIssuingCaCertificate(certs);
+
+        Assert.Equal(issuingCa.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectEncryptionCertificate_SingleCertificate_ReturnsThatCertificate()
+    {
+        using X509Certificate2 root = CreateRootCa("Encrypt Lonely Root");
+        X509Certificate2Collection certs = [root];
+
+        X509Certificate2 selected = CertificateManager.SelectEncryptionCertificate(certs);
+
+        Assert.Equal(root.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectEncryptionCertificate_CaOnlyBundle_ReturnsIssuingCa()
+    {
+        using X509Certificate2 root = CreateRootCa("Encrypt CA Root");
+        using X509Certificate2 issuingCa = CreateSubordinateCa("Encrypt CA Issuing CA", root);
+        X509Certificate2Collection certs = [root, issuingCa];
+
+        X509Certificate2 selected = CertificateManager.SelectEncryptionCertificate(certs);
+
+        Assert.Equal(issuingCa.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectEncryptionCertificate_BundleWithRaCertificates_ReturnsEncryptionRa()
+    {
+        using X509Certificate2 root = CreateRootCa("Encrypt RA Root");
+        using X509Certificate2 issuingCa = CreateSubordinateCa("Encrypt RA Issuing CA", root);
+        using X509Certificate2 raSigning = CreateEndEntity(
+            "Encrypt RA Signing",
+            issuingCa,
+            X509KeyUsageFlags.DigitalSignature
+        );
+        using X509Certificate2 raEncryption = CreateEndEntity(
+            "Encrypt RA Encryption",
+            issuingCa,
+            X509KeyUsageFlags.KeyEncipherment
+        );
+        X509Certificate2Collection certs = [root, issuingCa, raSigning, raEncryption];
+
+        X509Certificate2 selected = CertificateManager.SelectEncryptionCertificate(certs);
+
+        Assert.Equal(raEncryption.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectIssuedCertificate_ChainResponse_ReturnsCertificateForRequestedKey()
+    {
+        using X509Certificate2 root = CreateRootCa("Issued Root");
+        using X509Certificate2 issuingCa = CreateSubordinateCa("Issued Issuing CA", root);
+        using RSA requestKey = RSA.Create(2048);
+        using X509Certificate2 issued = CreateEndEntity(
+            "Issued End Entity",
+            issuingCa,
+            X509KeyUsageFlags.DigitalSignature,
+            requestKey
+        );
+        // An RA based endpoint returns its own newer end entity certificate too.
+        using X509Certificate2 raCert = CreateEndEntity(
+            "Issued RA",
+            issuingCa,
+            X509KeyUsageFlags.KeyEncipherment
+        );
+        X509Certificate2Collection response = [root, issuingCa, raCert, issued];
+        AsymmetricKeyParameter requestPublicKey = DotNetUtilities.GetRsaPublicKey(requestKey);
+
+        X509Certificate2? selected = CertificateManager.SelectIssuedCertificate(
+            response,
+            requestPublicKey
+        );
+
+        Assert.NotNull(selected);
+        Assert.Equal(issued.Thumbprint, selected.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectIssuedCertificate_NoKeyMatch_FallsBackToEndEntityCertificate()
+    {
+        using X509Certificate2 root = CreateRootCa("Fallback Root");
+        using X509Certificate2 issuingCa = CreateSubordinateCa("Fallback Issuing CA", root);
+        using X509Certificate2 issued = CreateEndEntity(
+            "Fallback End Entity",
+            issuingCa,
+            X509KeyUsageFlags.DigitalSignature
+        );
+        using RSA otherKey = RSA.Create(2048);
+        X509Certificate2Collection response = [root, issuingCa, issued];
+
+        X509Certificate2? selected = CertificateManager.SelectIssuedCertificate(
+            response,
+            DotNetUtilities.GetRsaPublicKey(otherKey)
+        );
+
+        Assert.NotNull(selected);
+        Assert.Equal(issued.Thumbprint, selected.Thumbprint);
     }
 }

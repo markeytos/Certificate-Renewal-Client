@@ -45,6 +45,201 @@ Bindings keep whichever store they already read from. Certificates are issued in
 
 All of these need to run elevated, and IIS binding changes are written to `applicationHost.config`.
 
+## Device enrollment for Entra joined devices (`enroll`)
+
+`enroll` asks EZCA for a device certificate for an Entra joined or hybrid joined Windows device, and
+proves which device is asking with the device's own Entra registration, so nothing secret has to be
+distributed to get a device its first certificate.
+
+Domain joined machines don't need this client: they get their certificates from Windows
+autoenrollment, which EZCA serves directly once its enrollment policy server is set in Group Policy.
+
+Copy the enrollment URL the Keytos portal shows for the Entra profile, exactly as shown. It ends in
+the tenant, CA and profile IDs, each profile has its own, and the device signs it, so a URL with
+anything added (a query string, say) fails every enrollment and is refused up front:
+
+```powershell
+.\EZCACertManager.exe enroll --Url "https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>" --SaveConfig
+```
+
+With `--SaveConfig` the URL is written to a machine wide configuration file, and later runs need no
+arguments at all:
+
+```powershell
+.\EZCACertManager.exe enroll
+```
+
+The configuration file lives in `%ProgramData%\Keytos\EZCACertManager\`. Run `enroll` as SYSTEM,
+as the installer's scheduled task does: the device registration certificate and its key are in the
+machine store.
+
+### How the device proves who it is
+
+When a Windows device joins Entra (or is hybrid joined), the Entra device registration service
+issues it a certificate whose subject is the Entra device ID, and Windows normally keeps its key in
+the TPM. `enroll` sends that certificate and signs the enrollment with its key. EZCA then checks
+that:
+
+- the certificate is signed by the Entra device registration service's key, which EZCA pins
+  (Microsoft doesn't publish the issuing certificate, so there is no chain to build), and its
+  extensions name the CA's tenant and this device;
+- the signature verifies with the certificate's key, over this enrollment's challenge, URL and
+  certificate request;
+- Entra ID, in the CA's own tenant, lists this certificate as the current registration of an
+  enabled, Entra joined or hybrid joined device, in a group the profile allows.
+
+The issued certificate names the device by its Entra device ID (`EntraDeviceId://<device ID>`) and
+whatever else the profile's formats say, never by anything the device puts in its request. A hybrid
+joined device can also hold a certificate from Windows autoenrollment; the two are expected to
+coexist, for example while moving off Active Directory.
+
+`enroll` is also the renewal path: it checks the certificate it already has and does nothing unless
+that certificate is within `--RenewalPercentage` of expiry. Renewing therefore re-proves the
+device's identity, so a device that has been disabled or deleted in Entra ID stops getting
+certificates rather than renewing on the strength of the certificate it already has. Run it from a
+scheduled task at startup and daily; the installer below sets that up.
+
+### The enrollment exchange
+
+`<url>` is the profile's enrollment URL, `.../api/enroll/device/<tenant>/<ca>/<profile>`.
+
+`GET .../api/enroll/device/<tenant>/<ca>/challenge` (the challenge belongs to the CA, so the profile
+segment is replaced):
+
+```json
+{ "challengeId": "<GUID>", "nonce": "<base64>" }
+```
+
+`POST <url>` with `Authorization: EntraDevice <base64 DER of the device registration certificate>`
+and body:
+
+```json
+{
+  "csr": "<PEM certificate request>",
+  "challengeId": "<GUID>",
+  "requestBinding": "<base64 signature>",
+  "deviceId": "<Entra device ID>",
+  "clientReportedName": "CN=device.contoso.com"
+}
+```
+
+Answering `200`:
+
+```json
+{ "certificate": "<PEM>", "subject": "CN=...", "attestationSource": "entra" }
+```
+
+`requestBinding` is an RSA PKCS#1 v1.5 SHA-256 signature, by the device registration key, over a
+byte string built from these fields, each written with its length as a little-endian `uint32` in
+front of it so no two different sets of values can produce the same bytes:
+
+| Order | Field |
+|---|---|
+| 1 | the ASCII context string `EZCA-DEVICE-ENROLL-v1` |
+| 2 | the Authorization scheme, `EntraDevice` |
+| 3 | the absolute enrollment URL, as `Uri.AbsoluteUri` writes it |
+| 4 | `challengeId` |
+| 5 | the raw nonce, base64-decoded |
+| 6 | `SHA256(csr DER)` |
+
+The URL names the tenant, the CA and the profile, so a signature made for one of them can't be
+presented to another, and the challenge is spent on its first use, so a captured request can't be
+replayed. `deviceId` is only checked against the certificate and `clientReportedName` is only
+logged; the identity comes from the certificate.
+
+Refusals come back as `{ "error": "<kind>", "message": "Error [E....]: ..." }`:
+
+| Status | Meaning | What the client does |
+|---|---|---|
+| `401` | EZCA didn't accept the device's registration (another tenant's, not its current one, signed by a key EZCA doesn't recognise, or the signature didn't verify) | Fails, pointing at `dsregcmd /status` |
+| `403` | The device may not enroll: it is disabled, not in an allowed group, or a registered rather than joined device, or the CA's subscription isn't active, or its IP restrictions refuse this machine | Fails |
+| `404` | The CA or profile doesn't offer device enrollment | Fails, pointing at the portal's URL |
+| `429` | EZCA is receiving too many requests, or Entra ID didn't vouch for this device a few minutes ago | Tries again with a new challenge, up to 3 attempts, waiting for `Retry-After` or a minute per attempt (at most 5 minutes) |
+| `503` | EZCA couldn't check the device with Entra ID just now | Fails; the next scheduled run tries again. EZCA turns the device away for a few minutes after this, so retrying sooner would only get a `429` |
+
+### Key storage
+
+On Windows, `enroll` creates the key in the TPM (`Microsoft Platform Crypto Provider`) and it is not
+exportable, so the certificate cannot be copied off the machine it was issued to. Two things change
+that:
+
+- Most TPMs cannot create a 4096 bit RSA key. `enroll` therefore defaults to 2048. If a TPM refuses
+  the requested size the client logs a warning and falls back to a software key of that size rather
+  than silently shortening the key.
+- A `--Path` ending in `.pfx` or `.p12` needs an exportable key, so it turns TPM storage off.
+
+`SCEPCertificate` keeps its existing default of `Microsoft Enhanced Cryptographic Provider v1.0`,
+because changing the provider under a command that is already deployed would change the kind of key
+container every existing caller gets. To put a SCEP key in the TPM, ask for it, and lower the key
+length, since the default 4096 is more than a TPM will do:
+
+```powershell
+.\EZCACertManager.exe SCEPCertificate --LocalStore -k 2048 --KeyProvider "Microsoft Platform Crypto Provider" ...
+```
+
+A provider you name is used or the command fails; only the default falls back. For
+`SCEPCertificate` on Linux and macOS the key is created by BouncyCastle and the provider name is
+ignored.
+
+### Deploying it
+
+The Windows release includes `EZCACertManager.msi`, which installs the client to
+`C:\Program Files\Keytos\EZCACertManager\` and registers a scheduled task that runs `enroll` as
+SYSTEM at startup and daily. Deploy it per device as a line-of-business app through Intune, or
+install it silently:
+
+```powershell
+msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>"
+```
+
+`ENROLLURL` is written to the configuration file before the first enrollment is attempted, so a
+device that was offline during the install, or hadn't finished joining Entra, still enrolls when
+the scheduled task next runs. The
+install directory is fixed, because a scheduled task definition is not formatted by Windows
+Installer and so has to name the executable by path.
+
+### How a run knows whether there is anything to do
+
+`enroll` records the thumbprint of the certificate it installed in the same configuration file and
+looks for that thumbprint on the next run. It does not search by subject, because EZCA and not the
+client chooses the subject: a name search would both match certificates this command never issued
+(reporting success without enrolling) and miss the one it did (enrolling again every day). The
+thumbprint is written whether or not `--SaveConfig` was passed, since it is state rather than
+configuration.
+
+### Protecting the configuration
+
+The machine-wide configuration decides which endpoint an unattended SYSTEM run enrols against, so
+the client refuses to read one that an account without administrative rights could have written.
+It checks the file and every directory between it and the shared data root, for both permissions
+and ownership, and refuses to *write* into a directory chain that would fail that check rather
+than reporting success and failing on every later run.
+
+Two things about this are worth knowing before a release:
+
+- **Verify a silent install end to end, once, before any release.** Two things depend on install
+  ordering and on behaviour of the WiX util extension that cannot be proved from this repository,
+  and both fail silently because the enrollment custom action returns `ignore`:
+
+  ```powershell
+  msiexec /i EZCACertManager.msi /qn ENROLLURL="https://portal.ezca.io/api/enroll/device/<tenant>/<ca>/<profile>"
+  icacls "C:\ProgramData\Keytos"
+  Test-Path "C:\ProgramData\Keytos\EZCACertManager\enrollment.json"
+  ```
+
+  `icacls` must show no `BUILTIN\Users` entry granting `(WD,AD)` and no entries marked `(I)` — the
+  directories must carry a *protected* DACL, because `%ProgramData%` grants `Users` write through
+  a container-inherited ACE and the client refuses to write into a chain in that state.
+  `Test-Path` must return `True`: the client writes the configuration during the install, and it
+  has to run after the extension applies those permissions. If the file is missing, the scheduled
+  task has no URL and the device never enrols, on every device in the fleet.
+
+### Known limitation
+
+A renewed device certificate is added to the store next to the one it replaces; superseded
+certificates are not deleted. Windows picks the one with the longest remaining validity for EAP-TLS,
+so this is cosmetic, but a long lived machine accumulates expired certificates in its store.
+
 ## Installation
 
 1. Navigate to the **Releases** section.

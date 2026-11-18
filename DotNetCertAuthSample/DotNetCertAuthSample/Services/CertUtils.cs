@@ -254,6 +254,50 @@ public static class CertUtils
             .Trim()
             .ToUpperInvariant();
 
+    /// <summary>
+    /// The certificate with this thumbprint, or null when the store does not hold it.
+    /// </summary>
+    public static X509Certificate2? FindCertificateByThumbprint(
+        IStoreService storeService,
+        string thumbprint,
+        bool localStore,
+        string? password = null
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(thumbprint);
+        return storeService
+            .GetAllCertificatesInStore(localStore, password)
+            .FirstOrDefault(storeCertificate =>
+                storeCertificate.Thumbprint.Equals(
+                    thumbprint,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+    }
+
+    /// <summary>
+    /// Turns a bare name into a distinguished name. Both certificate request builders hand the
+    /// subject to a DN parser that rejects a value with no attribute, and the name of a machine
+    /// without an Active Directory computer object is a bare FQDN.
+    /// </summary>
+    public static string EnsureDistinguishedName(string subjectName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subjectName);
+        subjectName = subjectName.Trim();
+        try
+        {
+            // Any parsable distinguished name is left alone, not just one that happens to lead
+            // with CN: prefixing "OU=Devices,DC=contoso,DC=com" would make a nonsense common name
+            // out of the whole thing.
+            _ = new X509Name(subjectName);
+            return subjectName;
+        }
+        catch (Exception)
+        {
+            return "CN=" + subjectName;
+        }
+    }
+
     public static string StoreString(bool localStore)
     {
         if (localStore)

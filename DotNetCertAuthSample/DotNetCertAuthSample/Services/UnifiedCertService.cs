@@ -28,7 +28,8 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         string keyProvider = "",
         X509KeyUsageFlags? keyUsage = null,
         bool makePrivateKeyExportable = false,
-        HashAlgorithmName? hashAlgorithm = null
+        HashAlgorithmName? hashAlgorithm = null,
+        string? challengePassword = null
     )
     {
         AsymmetricCipherKeyPair keyPair = GenerateKeyPair(keylength);
@@ -38,7 +39,7 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
             GetSignatureAlgorithm(keyPair, hashAlgorithm),
             x509Name,
             keyPair.Public,
-            CreateAttributes(sans, ekus, usage),
+            CreateAttributes(sans, ekus, usage, challengePassword),
             keyPair.Private
         );
 
@@ -83,6 +84,26 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
     public List<X509Certificate2> GetCertificatesIssuedByCaSki(string caSki, bool localStore)
     {
         return CertUtils.GetCACertificates(caSki, localStore);
+    }
+
+    public void DiscardPendingRequest()
+    {
+        // The key only ever lived in this object, so dropping it is all there is to do.
+        _keyPair = null;
+    }
+
+    public X509Certificate2? GetCertificateByThumbprint(
+        string thumbprint,
+        bool localStore,
+        string? password = null
+    )
+    {
+        return CertUtils.FindCertificateByThumbprint(
+            storeService,
+            thumbprint,
+            localStore,
+            password
+        );
     }
 
     public RSA ConvertToDotnetRSA(RsaPrivateCrtKeyParameters key)
@@ -221,11 +242,24 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
     private static DerSet CreateAttributes(
         List<string> sans,
         List<string> ekus,
-        X509KeyUsage keyUsage
+        X509KeyUsage keyUsage,
+        string? challengePassword = null
     )
     {
         List<AttributePkcs> attributes = [];
         X509ExtensionsGenerator extensionsGenerator = new();
+
+        if (!string.IsNullOrWhiteSpace(challengePassword))
+        {
+            // SCEP carries its shared secret as a signed attribute of the request itself, so the
+            // key that signs the request is the one the challenge is bound to.
+            attributes.Add(
+                new AttributePkcs(
+                    PkcsObjectIdentifiers.Pkcs9AtChallengePassword,
+                    new DerSet(new DerPrintableString(challengePassword))
+                )
+            );
+        }
 
         if (sans.Count > 0)
         {
@@ -261,7 +295,9 @@ public class UnifiedCertStoreService(IStoreService storeService) : ICertStoreSer
         List<string> sans
     )
     {
-        GeneralName[] generalNames = sans.Select(san => new GeneralName(GeneralName.DnsName, san))
+        GeneralName[] generalNames = SubjectAlternativeNameParser
+            .ParseEntries(sans)
+            .Select(SubjectAlternativeNameParser.ToGeneralName)
             .ToArray();
 
         GeneralNames subjectAlternativeNames = new(generalNames);

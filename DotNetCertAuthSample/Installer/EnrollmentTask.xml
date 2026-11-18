@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Requests and renews this machine's Keytos device certificate. Reads its settings from %ProgramData%\Keytos\EZCACertManager\enrollment.json, so this task carries no secret.</Description>
+    <URI>\Keytos\EZCA Device Enrollment</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT1M</Delay>
+    </BootTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2024-01-01T03:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <RandomDelay>PT1H</RandomDelay>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <!-- A laptop on battery still needs a certificate to get on the network. -->
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT10M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <!--
+      Named through an environment variable, which Task Scheduler expands when it runs the task.
+      A task XML is not formatted by Windows Installer, so it cannot carry an installer property,
+      and hardcoding C: would break every machine whose system drive is something else.
+    -->
+    <Exec>
+      <Command>%ProgramFiles%\Keytos\EZCACertManager\EZCACertManager.exe</Command>
+      <Arguments>enroll</Arguments>
+    </Exec>
+  </Actions>
+</Task>
