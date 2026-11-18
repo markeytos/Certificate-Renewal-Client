@@ -80,7 +80,9 @@ issues it a certificate whose subject is the Entra device ID, and Windows normal
 the TPM. `enroll` sends that certificate and signs the enrollment with its key. EZCA then checks
 that:
 
-- the certificate chains to the Entra device registration service;
+- the certificate is signed by the Entra device registration service's key, which EZCA pins
+  (Microsoft doesn't publish the issuing certificate, so there is no chain to build), and its
+  extensions name the CA's tenant and this device;
 - the signature verifies with the certificate's key, over this enrollment's challenge, URL and
   certificate request;
 - Entra ID, in the CA's own tenant, lists this certificate as the current registration of an
@@ -149,8 +151,8 @@ Refusals come back as `{ "error": "<kind>", "message": "Error [E....]: ..." }`:
 
 | Status | Meaning | What the client does |
 |---|---|---|
-| `401` | EZCA didn't accept the device's registration (another tenant's, not its current one, or the signature didn't verify) | Fails, pointing at `dsregcmd /status` |
-| `403` | The device proved who it is but may not enroll (disabled, not in an allowed group, or a registered rather than joined device) | Fails |
+| `401` | EZCA didn't accept the device's registration (another tenant's, not its current one, signed by a key EZCA doesn't recognise, or the signature didn't verify) | Fails, pointing at `dsregcmd /status` |
+| `403` | The device may not enroll: it is disabled, not in an allowed group, or a registered rather than joined device, or the CA's subscription isn't active, or its IP restrictions refuse this machine | Fails |
 | `404` | The CA or profile doesn't offer device enrollment | Fails, pointing at the portal's URL |
 | `429` | EZCA is receiving too many requests, or Entra ID didn't vouch for this device a few minutes ago | Tries again with a new challenge, up to 3 attempts, waiting for `Retry-After` or a minute per attempt (at most 5 minutes) |
 | `503` | EZCA couldn't check the device with Entra ID just now | Fails; the next scheduled run tries again. EZCA turns the device away for a few minutes after this, so retrying sooner would only get a `429` |

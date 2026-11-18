@@ -8,10 +8,11 @@ namespace DotNetCertAuthSample.Services;
 /// <summary>
 /// Proves the device's identity with its Entra device registration certificate and the key behind
 /// it. Windows creates that certificate when the device is Entra joined or hybrid joined, and
-/// normally keeps its key in the TPM. EZCA checks that the certificate chains to the Entra device
-/// registration service, that the signature over this enrollment verifies with its key, and that
-/// Entra ID lists it as the current registration of an enabled device in the CA's own tenant, so
-/// the device never needs a secret from an administrator.
+/// normally keeps its key in the TPM. EZCA checks that the certificate is signed by the Entra
+/// device registration service's key, which it pins, and names the CA's tenant and this device;
+/// that the signature over this enrollment verifies with its key; and that Entra ID lists it as
+/// the current registration of an enabled device in the CA's own tenant, so the device never
+/// needs a secret from an administrator.
 /// </summary>
 public class EntraDeviceAttestor : IDeviceAttestor
 {
